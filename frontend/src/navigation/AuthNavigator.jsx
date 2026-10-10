@@ -7,7 +7,6 @@ import WelfareNavigator from './WelfareNavigator';
 import ManagementNavigator from './ManagementNavigator';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import SplashWelcomeScreen from '../screens/auth/SplashWelcomeScreen';
-import LoadingScreen from '../screens/auth/LoadingScreen';
 import ConsentScreen from '../screens/auth/ConsentScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import WellbeingCheckScreen from '../screens/student/wellbeing-check';
@@ -60,13 +59,7 @@ const AuthNavigator = () => {
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {/* Entry points — Splash → Welcome → Consent → Login */}
-      <Stack.Screen
-        name="StartupSplash"
-        children={({ navigation }) => (
-          <LoadingScreen onGetStarted={() => navigation.replace('Welcome')} />
-        )}
-      />
+      {/* Entry points — the Develop splash/welcome flow → Consent → Login */}
       <Stack.Screen name="Welcome"  component={SplashWelcomeScreen} />
       <Stack.Screen name="Consent"  component={ConsentScreen} />
       <Stack.Screen name="Login"    component={LoginScreen} />
