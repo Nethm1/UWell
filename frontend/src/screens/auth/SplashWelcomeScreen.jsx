@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const CORAL  = '#EF806B';
 const CREAM  = '#FFF9F3';
@@ -23,7 +23,7 @@ const WHITE  = '#FFFFFF';
 /* =========================================================
    UWELL LOGO — animated leaves + heart
 ========================================================= */
-function UWellLogo() {
+function UWellLogo({ animScale }) {
   /* leaf sway refs */
   const leafSwayL = useRef(new Animated.Value(0)).current;
   const leafSwayR = useRef(new Animated.Value(0)).current;
@@ -48,8 +48,12 @@ function UWellLogo() {
     return () => { swayL.stop(); swayR.stop(); };
   }, []);
 
+  const containerStyle = animScale
+    ? [styles.logoCircle, { transform: [{ scale: animScale }] }]
+    : styles.logoCircle;
+
   return (
-    <Animated.View style={styles.logoCircle}>
+    <Animated.View style={containerStyle}>
       {/* Left leaf — sways */}
       <Animated.View
         style={[
@@ -75,10 +79,97 @@ function UWellLogo() {
 }
 
 /* =========================================================
+   SPLASH SCREEN
+========================================================= */
+function SplashScreen() {
+  const bgFade    = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.6)).current;
+  const logoPulse = useRef(new Animated.Value(1)).current;
+  const textFade  = useRef(new Animated.Value(0)).current;
+  const textSlide = useRef(new Animated.Value(20)).current;
+  const tagFade   = useRef(new Animated.Value(0)).current;
+  const dotScale  = useRef(new Animated.Value(0)).current;
+  const dotFade   = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    /* ── entrance sequence ── */
+    Animated.sequence([
+      /* 1 — bg fades in */
+      Animated.timing(bgFade, { toValue: 1, duration: 400, useNativeDriver: true }),
+
+      /* 2 — logo bounces in */
+      Animated.spring(logoScale, { toValue: 1.1, friction: 4, tension: 60, useNativeDriver: true }),
+
+      /* 3 — small settle */
+      Animated.timing(logoScale, { toValue: 1, duration: 200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+
+      /* 4 — app name slides up */
+      Animated.parallel([
+        Animated.timing(textFade,  { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(textSlide, { toValue: 0, duration: 500, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+      ]),
+
+      /* 5 — tagline */
+      Animated.timing(tagFade, { toValue: 1, duration: 450, useNativeDriver: true }),
+
+      /* 6 — bottom dot */
+      Animated.parallel([
+        Animated.spring(dotScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
+        Animated.timing(dotFade,  { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]),
+    ]).start();
+
+    /* gentle breathing pulse on logo */
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoPulse, { toValue: 1.06, duration: 1600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(logoPulse, { toValue: 1,    duration: 1600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    const delay = setTimeout(() => pulse.start(), 900);
+    return () => { clearTimeout(delay); pulse.stop(); };
+  }, []);
+
+  const combinedScale = Animated.multiply(logoScale, logoPulse);
+
+  return (
+    <SafeAreaView style={styles.splashSafe}>
+      <Animated.View style={[styles.splashContainer, { opacity: bgFade }]}>
+
+        {/* soft blobs */}
+        <View style={styles.splashBlobTR} />
+        <View style={styles.splashBlobBL} />
+
+        {/* ── logo ── */}
+        <UWellLogo animScale={combinedScale} />
+
+        {/* ── app name ── */}
+        <Animated.View style={{ opacity: textFade, transform: [{ translateY: textSlide }], alignItems: 'center' }}>
+          <Text style={styles.splashAppName}>UWell</Text>
+        </Animated.View>
+
+        {/* ── tagline ── */}
+        <Animated.Text style={[styles.splashTagline, { opacity: tagFade }]}>
+          Your wellbeing, your journey.
+        </Animated.Text>
+
+        {/* ── bottom message ── */}
+        <Animated.View style={[styles.splashBottom, { opacity: dotFade, transform: [{ scale: dotScale }] }]}>
+          <View style={styles.splashDot} />
+          <Text style={styles.splashBottomText}>Take a moment for yourself.</Text>
+        </Animated.View>
+
+      </Animated.View>
+    </SafeAreaView>
+  );
+}
+
+/* =========================================================
    WELCOME SCREEN
 ========================================================= */
 const SplashWelcomeScreen = ({ navigation }) => {
-  // Expo's native splash is the only startup screen; render the welcome view directly.
+  const [showSplash, setShowSplash] = useState(true);
+
   const fadeAnim   = useRef(new Animated.Value(0)).current;
   const slideAnim  = useRef(new Animated.Value(22)).current;
   const imgScale   = useRef(new Animated.Value(0.92)).current;
@@ -87,8 +178,16 @@ const SplashWelcomeScreen = ({ navigation }) => {
   const btnScale   = useRef(new Animated.Value(1)).current;
   const btn2Scale  = useRef(new Animated.Value(1)).current;
 
+  /* splash timer */
+  useEffect(() => {
+    const t = setTimeout(() => setShowSplash(false), 3600);
+    return () => clearTimeout(t);
+  }, []);
+
   /* welcome entrance */
   useEffect(() => {
+    if (showSplash) return;
+
     Animated.parallel([
       Animated.timing(fadeAnim,   { toValue: 1, duration: 700, easing: Easing.out(Easing.ease), useNativeDriver: true }),
       Animated.timing(slideAnim,  { toValue: 0, duration: 650, easing: Easing.out(Easing.ease), useNativeDriver: true }),
@@ -107,7 +206,7 @@ const SplashWelcomeScreen = ({ navigation }) => {
     );
     float.start();
     return () => float.stop();
-  }, []);
+  }, [showSplash]);
 
   const pressBtn = (scaleRef, cb) => {
     Animated.sequence([
@@ -115,6 +214,8 @@ const SplashWelcomeScreen = ({ navigation }) => {
       Animated.spring(scaleRef, { toValue: 1,    friction: 5, useNativeDriver: true }),
     ]).start(cb);
   };
+
+  if (showSplash) return <SplashScreen />;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -147,7 +248,7 @@ const SplashWelcomeScreen = ({ navigation }) => {
               <View style={styles.imgDecorTR} />
               <View style={styles.imgDecorBL} />
               <Image
-                source={require('../../assets/images/welcome-student.png')}
+                source={require('../../assets/images/loadingscreen.png')}
                 style={styles.studentImg}
                 resizeMode="contain"
               />
@@ -188,7 +289,7 @@ const SplashWelcomeScreen = ({ navigation }) => {
               <Animated.View style={[styles.btnWrap, { transform: [{ scale: btnScale }] }]}>
                 <Pressable
                   style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.88 }]}
-                  onPress={() => pressBtn(btnScale, () => navigation.navigate('Consent'))}
+                  onPress={() => pressBtn(btnScale, () => navigation.navigate('Register'))}
                 >
                   <Text style={styles.primaryBtnText}>Get Started</Text>
                   <View style={styles.arrowCircle}>
@@ -220,6 +321,21 @@ export default SplashWelcomeScreen;
 const styles = StyleSheet.create({
 
   /* ── SPLASH ── */
+  splashSafe:      { flex: 1, backgroundColor: CREAM },
+  splashContainer: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 28, position: 'relative',
+    backgroundColor: CREAM,
+  },
+  splashBlobTR: {
+    position: 'absolute', width: 280, height: 280, borderRadius: 140,
+    backgroundColor: '#FBE9E1', top: -130, right: -120, opacity: 0.55,
+  },
+  splashBlobBL: {
+    position: 'absolute', width: 240, height: 240, borderRadius: 120,
+    backgroundColor: '#EDF3EC', bottom: -120, left: -110, opacity: 0.7,
+  },
+
   /* logo */
   logoCircle: {
     width: 72, height: 72, borderRadius: 36, backgroundColor: CORAL,
@@ -242,6 +358,25 @@ const styles = StyleSheet.create({
     position: 'absolute', width: 3, height: 13,
     backgroundColor: WHITE, bottom: 12, borderRadius: 2,
   },
+
+  /* splash text */
+  splashAppName: {
+    fontSize: 40, fontWeight: '800', color: DARK,
+    letterSpacing: 0.3, marginTop: 18,
+  },
+  splashTagline: {
+    fontSize: 13, color: '#927B72', marginTop: 6,
+    letterSpacing: 0.4, textAlign: 'center',
+  },
+  splashBottom: {
+    position: 'absolute', bottom: height < 700 ? 30 : 44,
+    flexDirection: 'row', alignItems: 'center',
+  },
+  splashDot: {
+    width: 7, height: 7, borderRadius: 4,
+    backgroundColor: CORAL, marginRight: 8,
+  },
+  splashBottomText: { fontSize: 11, color: '#9A8178', fontWeight: '500' },
 
   /* ── WELCOME ── */
   safeArea:     { flex: 1, backgroundColor: CREAM },
