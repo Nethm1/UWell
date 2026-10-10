@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const counselorStudentSchema = new mongoose.Schema(
   {
     _id: { type: String },
+    sourceStudentId: { type: String, default: '' },
     name: { type: String, default: '' },
     yearCourse: { type: String, default: '' },
     sessionsCompleted: { type: Number, default: 0 },
@@ -20,6 +21,7 @@ const counselorStudentSchema = new mongoose.Schema(
     toJSON: {
       virtuals: true,
       transform: (doc, ret) => {
+        ret.id = ret._id;
         delete ret._id;
         return ret;
       },

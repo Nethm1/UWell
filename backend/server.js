@@ -1,26 +1,31 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 const connectDB = require('./src/config/db');
 
-dotenv.config();
+// Always load this backend's environment, including when npm is run from the
+// repository root rather than from the backend directory.
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err);
+  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
 });
-
-connectDB();
 
 const app = express();
 
 
 app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Profile photos are stored as compressed data images, so permit a modest
+// payload while keeping request sizes bounded.
+app.use(express.json({ limit: '8mb' }));
+app.use(express.urlencoded({ extended: true, limit: '8mb' }));
 
 // ─── Request Logger Middleware ───────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -74,9 +79,16 @@ app.use('/api/student/mood', require('./src/routes/student/moodRoutes'));
 // Appointments: CRUD /api/student/appointments — must be before studentRoutes
 app.use('/api/student/appointments', require('./src/routes/student/appointmentRoutes'));
 
+// Private student-to-counselor conversations for booked sessions.
+app.use('/api/student/messages', require('./src/routes/student/messageRoutes'));
+
 // ─── Counselor Module Routes ──────────────────────────────────────────────────
 // Profile, stats, appointments, students, messages, availability & video session
 app.use('/api/counselor', require('./src/routes/counselor/counselorRoutes'));
+
+// ─── Welfare Module Routes ────────────────────────────────────────────────────
+// Profile, schedule, dashboard, appointments, counseling services & notifications
+app.use('/api/welfare', require('./src/routes/welfare/welfareRoutes'));
 
 // Counselors: read-only list + availability for students
 app.use('/api/student/counselors', (() => {
@@ -187,28 +199,41 @@ const PORT = parseInt(process.env.PORT, 10) || 5000;
 const ALT_PORT = parseInt(process.env.ALT_PORT, 10) || 8082;
 
 function listen(port, label) {
-  const server = app.listen(port, '0.0.0.0', () => {
-    console.log(`✅ ${label} listening on http://0.0.0.0:${port}`);
-  });
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, '0.0.0.0');
 
-  server.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${port} is already in use. ${label} could not start.`);
-      return;
+    server.once('listening', () => {
+      console.log(`✅ ${label} listening on http://0.0.0.0:${port}`);
+      resolve(server);
+    });
+
+    server.once('error', (error) => {
+      const description = error.code === 'EADDRINUSE'
+        ? `Port ${port} is already in use.`
+        : `Failed to start on port ${port}.`;
+      reject(new Error(`${label}: ${description} ${error.message}`));
+    });
+  });
+}
+
+async function startServers() {
+  try {
+    await connectDB();
+
+    // The mobile app uses ALT_PORT; PORT remains available for local/API clients.
+    await listen(PORT, 'UWell Backend');
+    if (ALT_PORT && ALT_PORT !== PORT) {
+      await listen(ALT_PORT, 'UWell Backend (Firewall-friendly port)');
     }
 
-    console.error(`❌ Failed to start ${label} on port ${port}:`, error);
-  });
+    console.log('   Health → GET /api/health');
+    console.log('   Auth   → POST /api/auth/student/register');
+    console.log('            POST /api/auth/student/login');
+    console.log('   Student→ GET/PUT /api/student/profile');
+  } catch (error) {
+    console.error('❌ Backend startup failed:', error.message);
+    process.exit(1);
+  }
 }
 
-// Listen on primary port (0.0.0.0 for IPv4 network access)
-listen(PORT, 'UWell Backend');
-console.log(`   Auth  → POST /api/auth/student/register`);
-console.log(`          POST /api/auth/student/login`);
-console.log(`   Student → GET/PUT /api/student/profile`);
-console.log(`             GET     /api/student/:studentId`);
-
-// Listen on ALT_PORT (8082 is open in Windows Firewall 8081-8112 rule for mobile devices)
-if (ALT_PORT && ALT_PORT !== PORT) {
-  listen(ALT_PORT, 'UWell Backend (Firewall-friendly port)');
-}
+startServers();

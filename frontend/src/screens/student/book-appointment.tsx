@@ -18,11 +18,9 @@ export default function BookAppointmentScreen() {
     date?: string;
     time?: string;
     counselorName?: string;
-    counselorSpecialization?: string;
-    counselorExperience?: string;
     appointmentId?: string;
   } || {};
-  const { counselorId, date, time, counselorName, counselorSpecialization, counselorExperience, appointmentId } = params;
+  const { counselorId, date, time, counselorName, appointmentId } = params;
   const isReschedule = !!appointmentId;
 
   const [sessionType, setSessionType] = useState('Online');
@@ -30,11 +28,10 @@ export default function BookAppointmentScreen() {
 
   const handleReviewBooking = () => {
     navigation.navigate('ReviewBooking', {
-      counselorId: String(counselorId || ''),
-      counselorName: counselorName || '',
-      counselorSpecialization: counselorSpecialization || 'Student Counselling',
-      date: String(date || ''),
-      time: String(time || ''),
+      counselorId: String(counselorId || 'c1'),
+      counselorName: counselorName || 'Counselor',
+      date: String(date || 'Mon, Oct 12'),
+      time: String(time || '09:00 AM'),
       sessionType,
       notes,
       appointmentId,
@@ -79,10 +76,8 @@ export default function BookAppointmentScreen() {
 
         <View style={styles.counselorCard}>
           <View style={styles.profileCircle}>
-            <Text style={styles.profileInitials}>
-              {counselorName
-                ? counselorName.split(' ').map((p: string) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
-                : '?'}
+            <Text style={styles.profileIcon}>
+              👩‍⚕️
             </Text>
           </View>
 
@@ -92,14 +87,12 @@ export default function BookAppointmentScreen() {
             </Text>
 
             <Text style={styles.specialization}>
-              {counselorSpecialization || 'Student Counselling'}
+              Student Counselling
             </Text>
 
-            {!!counselorExperience && (
-              <Text style={styles.experience}>
-                {counselorExperience}
-              </Text>
-            )}
+            <Text style={styles.experience}>
+              Your selected counselor
+            </Text>
           </View>
         </View>
 
@@ -371,10 +364,8 @@ const styles = StyleSheet.create({
     marginRight: 13,
   },
 
-  profileInitials: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#EF806B',
+  profileIcon: {
+    fontSize: 30,
   },
 
   counselorInfo: {

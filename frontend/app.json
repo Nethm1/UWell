@@ -35,7 +35,15 @@
           "enableFullScreenImage_legacy": true
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "UWell needs access to your photos so you can share images in private chats.",
+          "cameraPermission": "UWell uses your camera so you can capture and share images in private chats.",
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }

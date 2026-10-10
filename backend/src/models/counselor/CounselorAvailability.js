@@ -5,6 +5,8 @@ const counselorAvailabilitySchema = new mongoose.Schema(
     _id: { type: String },
     counselorId: { type: String, default: 'c1' },
     day: { type: String, default: '' },
+    // Empty for a recurring weekly schedule; YYYY-MM-DD for a one-off date.
+    date: { type: String, default: '' },
     active: { type: Boolean, default: true },
     startTime: { type: String, default: '09:00 AM' },
     endTime: { type: String, default: '05:00 PM' },

@@ -100,28 +100,29 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
+  const confirmLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (e) {
+      // Clearing local auth state still completes logout if the API is unavailable.
+    }
+    await logout?.();
+  };
+
   const handleLogout = () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out of your Management account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await authService.logout();
-            } catch (e) {
-              // Ignore network logout error
-            }
-            if (logout) {
-              await logout();
-            }
-          },
-        },
-      ]
-    );
+    const message = 'Are you sure you want to log out of your Management account?';
+
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(message)) {
+        void confirmLogout();
+      }
+      return;
+    }
+
+    Alert.alert('Log Out', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: () => { void confirmLogout(); } },
+    ]);
   };
 
   const initials = `${(profile.firstName || 'A')[0]}${(profile.lastName || 'M')[0]}`.toUpperCase();

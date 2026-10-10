@@ -1,5 +1,10 @@
 const mongoose = require('mongoose');
 
+// Canonical Appointment model.
+// Both the student booking flow and the welfare/management dashboards read and
+// write the shared `appointments` collection, so this single schema merges the
+// field sets used by each side. Re-exported by models/student/Appointment.js to
+// avoid registering the same model name twice (OverwriteModelError).
 const appointmentSchema = new mongoose.Schema(
   {
     student: {
@@ -15,6 +20,11 @@ const appointmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Counselor',
       default: null,
+    },
+    counselorId: {
+      type: String,
+      default: '',
+      trim: true,
     },
     counselorName: {
       type: String,

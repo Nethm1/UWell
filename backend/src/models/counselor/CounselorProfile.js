@@ -14,6 +14,7 @@ const counselorProfileSchema = new mongoose.Schema(
     officeLocation: { type: String, default: '' },
     email: { type: String, default: '' },
     avatarInitials: { type: String, default: 'EM' },
+    profileImage: { type: String, trim: true, default: '' },
     bio: { type: String, default: '' },
   },
   {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,69 +12,52 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { studentService } from '../../services/studentService';
 
-// Fallback shown only when API returns no approved counselors from DB.
-const FALLBACK_COUNSELORS: any[] = [];
-
 export default function CounselorSearchScreen() {
   const navigation = useNavigation<any>();
   const [search, setSearch] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
+
   const [counselors, setCounselors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await studentService.getCounselors();
-        const list = res?.data || [];
-        setCounselors(list.length > 0 ? list : FALLBACK_COUNSELORS);
-      } catch {
-        setCounselors(FALLBACK_COUNSELORS);
-      } finally {
-        setLoading(false);
-      }
+    let active = true;
+    studentService
+      .getCounselors()
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : (data?.data || []);
+        if (active) setCounselors(list);
+      })
+      .catch(() => {
+        if (active) setCounselors([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
     };
-    load();
   }, []);
 
-  const filters = [
-    'All',
-    'Student Counselling',
-    'Stress & Anxiety',
-    'Academic Support',
-  ];
+  const filters = useMemo(() => {
+    const specs = Array.from(
+      new Set(counselors.map((c) => c.specialization).filter(Boolean))
+    );
+    return ['All', ...specs];
+  }, [counselors]);
 
   const filteredCounselors = counselors.filter((counselor) => {
     const matchesSearch =
-      counselor.name
+      (counselor.name || '')
         .toLowerCase()
         .includes(search.toLowerCase()) ||
-      counselor.specialization
+      (counselor.specialization || '')
         .toLowerCase()
         .includes(search.toLowerCase());
 
-    let matchesFilter = true;
-
-    if (selectedFilter === 'Student Counselling') {
-      matchesFilter = counselor.specialization
-        .toLowerCase()
-        .includes('student counselling');
-    }
-
-    if (selectedFilter === 'Stress & Anxiety') {
-      matchesFilter = counselor.specialization
-        .toLowerCase()
-        .includes('stress') ||
-        counselor.specialization
-        .toLowerCase()
-        .includes('anxiety');
-    }
-
-    if (selectedFilter === 'Academic Support') {
-      matchesFilter = counselor.specialization
-        .toLowerCase()
-        .includes('academic');
-    }
+    const matchesFilter =
+      selectedFilter === 'All' ||
+      counselor.specialization === selectedFilter;
 
     return matchesSearch && matchesFilter;
   });
@@ -175,32 +158,29 @@ export default function CounselorSearchScreen() {
           Available Counselors
         </Text>
 
-        {loading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color="#EF806B" />
-            <Text style={styles.loadingText}>Finding counselors…</Text>
+        {loading && (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color="#EF806B" />
           </View>
-        ) : filteredCounselors.map((counselor) => (
+        )}
+
+        {!loading && filteredCounselors.map((counselor) => (
           <Pressable
-            key={counselor._id || counselor.id}
+            key={counselor.id || counselor._id}
             style={({ pressed }) => [
               styles.counselorCard,
               pressed && styles.cardPressed,
             ]}
             onPress={() =>
               navigation.navigate('CounselorProfile', {
-                counselorId:           counselor._id || counselor.id,
-                counselorName:         counselor.name,
-                counselorSpecialization: counselor.specialization,
-                counselorExperience:   counselor.experience,
+                counselorId: String(counselor.id || counselor._id),
               })
             }
           >
             {/* Profile */}
             <View style={styles.profileCircle}>
-              <Text style={styles.profileInitials}>
-                {counselor.avatarInitials ||
-                  counselor.name.split(' ').map((p: string) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}
+              <Text style={styles.avatarInitials}>
+                {counselor.avatarInitials || '👩‍⚕️'}
               </Text>
             </View>
 
@@ -215,14 +195,14 @@ export default function CounselorSearchScreen() {
               </Text>
 
               <Text style={styles.experience}>
-                {counselor.experience}
+                {counselor.title || counselor.qualification || 'Counselor'}
               </Text>
 
               <View style={styles.availabilityRow}>
                 <View style={styles.availableDot} />
 
                 <Text style={styles.availability}>
-                  {counselor.availability}
+                  View availability
                 </Text>
               </View>
 
@@ -238,7 +218,7 @@ export default function CounselorSearchScreen() {
           </Pressable>
         ))}
 
-        {/* Empty State — only when not loading */}
+        {/* Empty State */}
         {!loading && filteredCounselors.length === 0 && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyIcon}>🔍</Text>
@@ -443,10 +423,19 @@ const styles = StyleSheet.create({
     marginRight: 13,
   },
 
-  profileInitials: {
-    fontSize: 22,
+  profileIcon: {
+    fontSize: 30,
+  },
+
+  avatarInitials: {
+    fontSize: 18,
     fontWeight: '700',
-    color: '#EF806B',
+    color: '#C85F4E',
+  },
+
+  loadingBox: {
+    paddingVertical: 40,
+    alignItems: 'center',
   },
 
   counselorInfo: {
@@ -566,17 +555,5 @@ const styles = StyleSheet.create({
     color: '#806F68',
     fontSize: 10,
     lineHeight: 16,
-  },
-
-  loadingWrap: {
-    alignItems: 'center',
-    paddingTop: 40,
-    paddingBottom: 20,
-  },
-
-  loadingText: {
-    marginTop: 12,
-    color: '#8A7770',
-    fontSize: 13,
   },
 });

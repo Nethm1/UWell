@@ -248,7 +248,7 @@ const SplashWelcomeScreen = ({ navigation }) => {
               <View style={styles.imgDecorTR} />
               <View style={styles.imgDecorBL} />
               <Image
-                source={require('../../assets/images/welcome-student.png')}
+                source={require('../../assets/images/loadingscreen.png')}
                 style={styles.studentImg}
                 resizeMode="contain"
               />
@@ -289,7 +289,7 @@ const SplashWelcomeScreen = ({ navigation }) => {
               <Animated.View style={[styles.btnWrap, { transform: [{ scale: btnScale }] }]}>
                 <Pressable
                   style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.88 }]}
-                  onPress={() => pressBtn(btnScale, () => navigation.navigate('Consent'))}
+                  onPress={() => pressBtn(btnScale, () => navigation.navigate('Register'))}
                 >
                   <Text style={styles.primaryBtnText}>Get Started</Text>
                   <View style={styles.arrowCircle}>

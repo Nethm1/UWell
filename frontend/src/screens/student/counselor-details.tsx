@@ -1,90 +1,76 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   ScrollView,
-  ActivityIndicator,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { studentService } from '../../services/studentService';
 
-type CounselorData = {
-  _id?: string;
+type Counselor = {
   name: string;
   specialization: string;
   experience: string;
   qualification: string;
-  bio?: string;
+  icon: string;
+  bio: string;
   availability: string;
-  avatarInitials?: string;
-  profileImage?: string;
-};
-
-// Generic fallback — shown only when API fails and no counselorId was provided
-const FALLBACK: CounselorData = {
-  name: 'Counselor',
-  specialization: 'Student Counselling',
-  experience: '',
-  qualification: '',
-  bio: '',
-  availability: '',
-  avatarInitials: '?',
-  profileImage: '',
+  clinicalFocus?: string[];
 };
 
 export default function CounselorDetailsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute();
-  const params = route.params as { counselorId?: any; counselorName?: string } || {};
-  const { counselorId, counselorName } = params;
+  const params = route.params as { counselorId?: string } || {};
+  const { counselorId } = params;
+  const id = String(counselorId || 'c1');
 
-  const [counselor, setCounselor] = useState<CounselorData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        if (counselorId) {
-          const res = await studentService.getCounselorById(String(counselorId));
-          const d = res?.data;
-          if (d) { setCounselor(d); setLoading(false); return; }
-        }
-        // fallback
-        setCounselor(FALLBACK['1']);
-      } catch {
-        setCounselor(FALLBACK);
-      } finally {
-        setLoading(false);
-      }
+    let active = true;
+    studentService
+      .getCounselorById(id)
+      .then((data: any) => {
+        if (active) setProfile(data?.data || data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
     };
-    load();
-  }, [counselorId]);
+  }, [id]);
+
+  const counselor: Counselor = {
+    name: profile?.name || (loading ? 'Loading…' : 'Counselor'),
+    specialization: profile?.specialization || 'Student Counselling',
+    experience: profile?.title || 'Counseling Staff',
+    qualification: profile?.qualification || '',
+    icon: profile?.avatarInitials || '👩‍⚕️',
+    bio: profile?.bio || '',
+    availability: 'Available',
+    clinicalFocus: profile?.clinicalFocus || [],
+  };
 
   const handleViewAvailability = () => {
-    const current = counselor || FALLBACK['1'];
     navigation.navigate('Availability', {
-      counselorId,
-      counselorName:           current.name || counselorName || 'Counselor',
-      counselorSpecialization: current.specialization || '',
-      counselorExperience:     current.experience || '',
+      counselorId: id,
+      counselorName: counselor.name,
     });
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color="#EF806B" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const c = counselor || FALLBACK;
+  const handleMessageCounselor = () => {
+    navigation.navigate('StudentChat', {
+      counselorId: id,
+      counselorName: counselor.name,
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -104,71 +90,96 @@ export default function CounselorDetailsScreen() {
 
         {/* Profile Header */}
         <View style={styles.profileSection}>
-          {/* Avatar — real photo when available, initials as fallback */}
           <View style={styles.profileCircle}>
-            {c.profileImage ? (
-              <Image
-                source={{ uri: c.profileImage }}
-                style={styles.profileImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text style={styles.profileInitials}>
-                {(c.avatarInitials ||
-                  c.name.split(' ').map((p: string) => p[0]).filter(Boolean).slice(0, 2).join('')
-                ).toUpperCase()}
-              </Text>
-            )}
+            <Text style={styles.profileIcon}>
+              {counselor.icon}
+            </Text>
           </View>
 
-          <Text style={styles.name}>{c.name}</Text>
+          <Text style={styles.name}>
+            {counselor.name}
+          </Text>
 
-          <Text style={styles.specialization}>{c.specialization}</Text>
+          <Text style={styles.specialization}>
+            {counselor.specialization}
+          </Text>
 
           <View style={styles.availableRow}>
             <View style={styles.availableDot} />
-            <Text style={styles.availableText}>{c.availability}</Text>
+
+            <Text style={styles.availableText}>
+              {counselor.availability}
+            </Text>
           </View>
         </View>
 
         {/* About */}
-        <Text style={styles.sectionTitle}>About the Counselor</Text>
+        <Text style={styles.sectionTitle}>
+          About the Counselor
+        </Text>
 
         <View style={styles.card}>
-          <Text style={styles.bio}>{c.bio || 'Experienced counselor supporting university students.'}</Text>
+          <Text style={styles.bio}>
+            {counselor.bio}
+          </Text>
         </View>
 
         {/* Professional Details */}
-        <Text style={styles.sectionTitle}>Professional Details</Text>
+        <Text style={styles.sectionTitle}>
+          Professional Details
+        </Text>
 
         <View style={styles.card}>
+
+          {/* Qualification */}
           <View style={styles.detailRow}>
             <Text style={styles.detailIcon}>🎓</Text>
+
             <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Qualification</Text>
-              <Text style={styles.detailValue}>{c.qualification}</Text>
+              <Text style={styles.detailLabel}>
+                Qualification
+              </Text>
+
+              <Text style={styles.detailValue}>
+                {counselor.qualification}
+              </Text>
             </View>
           </View>
 
           <View style={styles.divider} />
 
+          {/* Experience */}
           <View style={styles.detailRow}>
             <Text style={styles.detailIcon}>💼</Text>
+
             <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Experience</Text>
-              <Text style={styles.detailValue}>{c.experience}</Text>
+              <Text style={styles.detailLabel}>
+                Experience
+              </Text>
+
+              <Text style={styles.detailValue}>
+                {counselor.experience}
+              </Text>
             </View>
           </View>
 
           <View style={styles.divider} />
 
+          {/* Specialization */}
           <View style={styles.detailRow}>
             <Text style={styles.detailIcon}>🧠</Text>
+
             <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Specialization</Text>
-              <Text style={styles.detailValue}>{c.specialization}</Text>
+              <Text style={styles.detailLabel}>
+                Specialization
+              </Text>
+
+              <Text style={styles.detailValue}>
+                {counselor.specialization}
+              </Text>
             </View>
           </View>
+
         </View>
 
         {/* What They Can Help With */}
@@ -177,26 +188,25 @@ export default function CounselorDetailsScreen() {
         </Text>
 
         <View style={styles.supportAreasCard}>
-          <View style={styles.supportItem}>
-            <Text style={styles.supportBullet}>✓</Text>
-            <Text style={styles.supportText}>
-              Academic and university-related concerns
-            </Text>
-          </View>
-
-          <View style={styles.supportItem}>
-            <Text style={styles.supportBullet}>✓</Text>
-            <Text style={styles.supportText}>
-              Stress and emotional wellbeing
-            </Text>
-          </View>
-
-          <View style={styles.supportItem}>
-            <Text style={styles.supportBullet}>✓</Text>
-            <Text style={styles.supportText}>
-              Personal challenges and wellbeing support
-            </Text>
-          </View>
+          {(counselor.clinicalFocus && counselor.clinicalFocus.length > 0
+            ? counselor.clinicalFocus
+            : [
+                'Academic and university-related concerns',
+                'Stress and emotional wellbeing',
+                'Personal challenges and wellbeing support',
+              ]
+          ).map((area, index, arr) => (
+            <View
+              key={`${area}-${index}`}
+              style={[
+                styles.supportItem,
+                index === arr.length - 1 && styles.supportItemLast,
+              ]}
+            >
+              <Text style={styles.supportBullet}>✓</Text>
+              <Text style={styles.supportText}>{area}</Text>
+            </View>
+          ))}
         </View>
 
         {/* Confidentiality */}
@@ -218,6 +228,13 @@ export default function CounselorDetailsScreen() {
         </View>
 
         {/* Availability Button */}
+        <Pressable
+          style={({ pressed }) => [styles.messageButton, pressed && { opacity: 0.82 }]}
+          onPress={handleMessageCounselor}
+        >
+          <Text style={styles.messageButtonText}>Message Counselor</Text>
+        </Pressable>
+
         <Pressable
           style={styles.availabilityButton}
           onPress={handleViewAvailability}
@@ -291,17 +308,8 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
 
-  profileInitials: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#EF806B',
-    letterSpacing: 1,
-  },
-
-  profileImage: {
-    width: 105,
-    height: 105,
-    borderRadius: 53,
+  profileIcon: {
+    fontSize: 55,
   },
 
   name: {
@@ -470,6 +478,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  messageButton: {
+    height: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#EF806B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 10,
+  },
+
+  messageButtonText: {
+    color: '#C85F4E',
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   availabilityButtonText: {

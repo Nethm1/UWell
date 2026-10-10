@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
@@ -145,26 +146,29 @@ export default function DashboardScreen({ navigation }) {
     );
   };
 
+  const confirmLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (e) {
+      // Clearing local auth state still completes logout if the API is unavailable.
+    }
+    await logout?.();
+  };
+
   const handleLogout = () => {
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out of the Management Portal?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await authService.logout();
-            } catch (e) {}
-            if (logout) {
-              await logout();
-            }
-          },
-        },
-      ]
-    );
+    const message = 'Are you sure you want to log out of the Management Portal?';
+
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(message)) {
+        void confirmLogout();
+      }
+      return;
+    }
+
+    Alert.alert('Log Out', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: () => { void confirmLogout(); } },
+    ]);
   };
 
   const filteredRequests = requests.filter((r) => {
