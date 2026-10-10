@@ -11,33 +11,73 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { colors, spacing, typography } from '../../theme';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
 import { counselorService } from '../../services/counselorService';
+import { studentService } from '../../services/studentService';
+import { useAuth } from '../../context/AuthContext';
+
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_DOCUMENT_TYPES = [
+  'application/pdf', 'text/plain', 'text/csv', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+];
+const MIME_BY_EXTENSION = {
+  pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv', doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+};
+const ACCEPTED_ATTACHMENT_TYPES = new Set([
+  ...ACCEPTED_DOCUMENT_TYPES, 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+]);
+
+const showError = (message) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(message);
+  else Alert.alert('Attachment unavailable', message);
+};
 
 const StudentChatScreen = ({ route, navigation }) => {
-  const studentId = route?.params?.studentId || 'stu-1';
-  const studentName = route?.params?.studentName || 'Sarah Jenkins';
+  const { isStudent } = useAuth();
+  const studentId = route?.params?.studentId;
+  const counselorId = route?.params?.counselorId;
+  const [studentName, setStudentName] = useState(route?.params?.studentName || route?.params?.counselorName || 'Counselor');
 
   const [chatData, setChatData] = useState(null);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [attachment, setAttachment] = useState(null);
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const flatListRef = useRef(null);
 
   useEffect(() => {
+    setLoading(true);
     loadChat();
-  }, [studentId]);
+  }, [studentId, counselorId, isStudent]);
 
   const loadChat = async () => {
     try {
       setError('');
-      const data = await counselorService.getMessageByStudentId(studentId);
+      const data = isStudent
+        ? await studentService.getCounselorConversation(counselorId)
+        : await counselorService.getMessageByStudentId(studentId);
       setChatData(data);
+      if (isStudent && data?.counselorName) setStudentName(data.counselorName);
+      if (!isStudent && data?.studentName) setStudentName(data.studentName);
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not load this conversation.');
     } finally {
@@ -45,13 +85,77 @@ const StudentChatScreen = ({ route, navigation }) => {
     }
   };
 
+  const toUploadAttachment = async (asset, fileData) => {
+    if (!asset?.uri) return null;
+    const assetType = String(asset.mimeType || asset.type || '').toLowerCase();
+    const extension = String(asset.name || asset.fileName || '').split('.').pop().toLowerCase();
+    const normalizedType = assetType.split(';')[0].trim();
+    const mimeType = normalizedType === 'image' || normalizedType === 'image/jpg'
+      ? (extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg')
+      : ((!normalizedType || normalizedType === 'application/octet-stream')
+        ? (MIME_BY_EXTENSION[extension] || normalizedType || 'application/octet-stream')
+        : normalizedType);
+    if (!ACCEPTED_ATTACHMENT_TYPES.has(mimeType)) {
+      throw new Error('Choose an image, PDF, or common document file.');
+    }
+    let base64 = fileData || asset.base64;
+    if (!base64) base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+    // Expo's web document picker returns a complete data URL; the API stores raw base64.
+    base64 = base64.replace(/^data:[^,]*;base64,/i, '').replace(/\s/g, '');
+    const size = asset.fileSize || asset.size || Math.floor(base64.length * 0.75);
+    if (size > MAX_ATTACHMENT_BYTES) throw new Error('Files must be 5 MB or smaller.');
+    return {
+      name: asset.name || asset.fileName || `image-${Date.now()}.${mimeType.split('/')[1] || 'jpg'}`,
+      mimeType,
+      size,
+      data: base64,
+    };
+  };
+
+  const chooseDocument = async () => {
+    setAttachmentMenuOpen(false);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ACCEPTED_DOCUMENT_TYPES,
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setUploading(true);
+      setAttachment(await toUploadAttachment(result.assets[0]));
+    } catch (pickError) {
+      showError(pickError.message || 'Could not read this file.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const chooseImage = async (camera = false) => {
+    setAttachmentMenuOpen(false);
+    try {
+      if (camera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) return showError('Allow camera access to capture and send a photo.');
+      }
+      const result = camera
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.75, base64: true })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75, base64: true });
+      if (result.canceled || !result.assets?.[0]) return;
+      setAttachment(await toUploadAttachment(result.assets[0]));
+    } catch (pickError) {
+      showError(pickError.message || 'Could not open the camera or photo library.');
+    }
+  };
+
   const handleSend = async () => {
-    if (!inputText.trim() || sending || !chatData) return;
-    const textToSend = inputText.trim();
+    if ((!inputText.trim() && !attachment) || sending || !chatData) return;
+    const message = { text: inputText.trim(), ...(attachment ? { attachment } : {}) };
     setSending(true);
     try {
-      await counselorService.sendMessage(studentId, textToSend);
+      if (isStudent) await studentService.sendCounselorMessage(counselorId, message);
+      else await counselorService.sendMessage(studentId, message);
       setInputText('');
+      setAttachment(null);
       await loadChat();
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (requestError) {
@@ -63,38 +167,65 @@ const StudentChatScreen = ({ route, navigation }) => {
     }
   };
 
+  const openAttachment = async (file) => {
+    if (!file?.data) return;
+    const dataUri = `data:${file.mimeType};base64,${file.data}`;
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.open(dataUri, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      const path = `${FileSystem.cacheDirectory}${encodeURIComponent(file.name || 'uwell-attachment')}`;
+      await FileSystem.writeAsStringAsync(path, file.data, { encoding: FileSystem.EncodingType.Base64 });
+      const openUri = Platform.OS === 'android' ? await FileSystem.getContentUriAsync(path) : path;
+      await Linking.openURL(openUri);
+    } catch {
+      showError('This attachment could not be opened on this device.');
+    }
+  };
+
   const displayTime = (value) => {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   };
 
   const renderBubble = ({ item }) => {
-    const isCounselor = item.sender === 'counselor';
+      const isMine = item.sender === (isStudent ? 'student' : 'counselor');
+      const attachmentUri = item.attachment?.data && item.attachment.mimeType?.startsWith('image/')
+        ? `data:${item.attachment.mimeType};base64,${item.attachment.data}` : null;
     return (
       <View
         style={[
           styles.bubbleWrapper,
-          isCounselor ? styles.counselorWrapper : styles.studentWrapper
+          isMine ? styles.counselorWrapper : styles.studentWrapper
         ]}
       >
         <View
           style={[
             styles.bubbleCard,
-            isCounselor ? styles.counselorBubble : styles.studentBubble
+            isMine ? styles.counselorBubble : styles.studentBubble
           ]}
         >
-          <Text
-            style={[
-              styles.bubbleText,
-              isCounselor ? styles.counselorText : styles.studentText
-            ]}
-          >
-            {item.text}
-          </Text>
+          {!!item.text && <Text style={[styles.bubbleText, isMine ? styles.counselorText : styles.studentText]}>{item.text}</Text>}
+          {item.attachment ? (
+            <TouchableOpacity
+              style={styles.attachmentCard}
+              onPress={() => openAttachment(item.attachment)}
+              activeOpacity={0.75}
+            >
+              {item.attachment.mimeType?.startsWith('image/') && attachmentUri
+                ? <Image source={{ uri: attachmentUri }} style={styles.attachmentImage} resizeMode="cover" />
+                : <Feather name="file-text" size={22} color={isMine ? '#fff' : colors.primary} />}
+              <View style={styles.attachmentTextWrap}>
+                <Text numberOfLines={1} style={[styles.attachmentName, isMine && styles.attachmentNameMine]}>{item.attachment.name}</Text>
+                <Text style={[styles.attachmentHint, isMine && styles.attachmentNameMine]}>{item.attachment.mimeType === 'application/pdf' ? 'PDF · Tap to open' : 'Attachment · Tap to open'}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : null}
           <Text
             style={[
               styles.timeText,
-              isCounselor ? styles.counselorTimeText : styles.studentTimeText
+              isMine ? styles.counselorTimeText : styles.studentTimeText
             ]}
           >
             {displayTime(item.timestamp)}
@@ -121,12 +252,12 @@ const StudentChatScreen = ({ route, navigation }) => {
           <Text style={styles.studentNameText}>{studentName}</Text>
           <View style={styles.statusOnlineRow}>
             <Ionicons name="lock-closed" size={10} color="#3973B9" style={{ marginRight: 4 }} />
-            <Text style={styles.onlineText}>Private chat · booked student</Text>
+            <Text style={styles.onlineText}>{isStudent ? 'Private chat · your counselor' : 'Private chat · booked student'}</Text>
           </View>
         </View>
 
         <ImagePlaceholder
-          initials={studentName.substring(0, 2)}
+          initials={isStudent ? (chatData?.counselorAvatarInitials || studentName.substring(0, 2)) : (chatData?.avatarInitials || studentName.substring(0, 2))}
           size={36}
         />
       </View>
@@ -158,9 +289,24 @@ const StudentChatScreen = ({ route, navigation }) => {
 
         {/* Input Bar */}
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.attachBtn} accessibilityLabel="Attach file">
-            <Text style={styles.attachIcon}>📎</Text>
-          </TouchableOpacity>
+          {attachmentMenuOpen && (
+            <View style={styles.attachmentMenu}>
+              <TouchableOpacity style={styles.attachmentOption} onPress={() => chooseImage(false)}><Feather name="image" size={17} color={colors.primary} /><Text style={styles.attachmentOptionText}>Photos</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.attachmentOption} onPress={() => chooseImage(true)}><Feather name="camera" size={17} color={colors.primary} /><Text style={styles.attachmentOptionText}>Camera</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.attachmentOption} onPress={chooseDocument}><Feather name="file" size={17} color={colors.primary} /><Text style={styles.attachmentOptionText}>Files</Text></TouchableOpacity>
+            </View>
+          )}
+          {attachment && (
+            <View style={styles.pendingAttachment}>
+              <Feather name={attachment.mimeType.startsWith('image/') ? 'image' : 'file-text'} size={16} color={colors.primary} />
+              <Text numberOfLines={1} style={styles.pendingAttachmentText}>{attachment.name}</Text>
+              <TouchableOpacity onPress={() => setAttachment(null)} accessibilityLabel="Remove attachment"><Ionicons name="close-circle" size={19} color={colors.textSecondary} /></TouchableOpacity>
+            </View>
+          )}
+          <View style={styles.inputRow}>
+            <TouchableOpacity style={styles.attachBtn} onPress={() => setAttachmentMenuOpen((open) => !open)} accessibilityLabel="Choose photo, camera, or file" disabled={loading || !!error || !chatData}>
+              {uploading ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name="paperclip" size={20} color={colors.primary} />}
+            </TouchableOpacity>
           <TextInput
             style={styles.textInput}
             placeholder={chatData ? 'Write a supportive reply…' : 'Open a booked student chat to reply'}
@@ -168,19 +314,20 @@ const StudentChatScreen = ({ route, navigation }) => {
             value={inputText}
             onChangeText={setInputText}
             onSubmitEditing={handleSend}
-            editable={!loading && !error && !!chatData && !sending}
+            editable={!loading && !error && !!chatData && !sending && !uploading}
           />
           <TouchableOpacity
             style={[
               styles.sendBtn,
-              (!inputText.trim() || sending || !chatData || !!error) && styles.sendBtnDisabled
+              ((!inputText.trim() && !attachment) || sending || uploading || !chatData || !!error) && styles.sendBtnDisabled
             ]}
             onPress={handleSend}
-            disabled={!inputText.trim() || sending || !chatData || !!error}
+            disabled={(!inputText.trim() && !attachment) || sending || uploading || !chatData || !!error}
             accessibilityLabel="Send message"
           >
             {sending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Send</Text>}
           </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -296,8 +443,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     padding: spacing.sm,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.white,
@@ -305,9 +452,13 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border
   },
   attachBtn: {
+    minWidth: 38,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: spacing.xs,
-    marginRight: spacing.xs
   },
+  inputRow: { width: '100%', flexDirection: 'row', alignItems: 'center' },
   attachIcon: {
     fontSize: 20
   },
@@ -335,7 +486,18 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: typography.fontSize.xs + 1,
     fontWeight: typography.fontWeight.bold
-  }
+  },
+  attachmentMenu: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 8, marginBottom: 7, backgroundColor: colors.creamBackground, borderRadius: 14 },
+  attachmentOption: { minWidth: 86, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  attachmentOptionText: { color: colors.darkText, fontSize: 12, fontWeight: '600' },
+  pendingAttachment: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 12, backgroundColor: colors.creamBackground, marginBottom: 7 },
+  pendingAttachmentText: { flex: 1, color: colors.darkText, fontSize: 12 },
+  attachmentCard: { flexDirection: 'row', alignItems: 'center', gap: 9, minWidth: 170, maxWidth: 250, padding: 8, marginTop: 5, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.18)' },
+  attachmentImage: { width: 46, height: 46, borderRadius: 8 },
+  attachmentTextWrap: { flex: 1, minWidth: 0 },
+  attachmentName: { color: colors.darkText, fontSize: 12, fontWeight: '700' },
+  attachmentNameMine: { color: '#fff' },
+  attachmentHint: { color: colors.textSecondary, fontSize: 10, marginTop: 2 },
 });
 
 export default StudentChatScreen;

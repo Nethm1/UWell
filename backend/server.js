@@ -79,6 +79,9 @@ app.use('/api/student/mood', require('./src/routes/student/moodRoutes'));
 // Appointments: CRUD /api/student/appointments — must be before studentRoutes
 app.use('/api/student/appointments', require('./src/routes/student/appointmentRoutes'));
 
+// Private student-to-counselor conversations for booked sessions.
+app.use('/api/student/messages', require('./src/routes/student/messageRoutes'));
+
 // ─── Counselor Module Routes ──────────────────────────────────────────────────
 // Profile, stats, appointments, students, messages, availability & video session
 app.use('/api/counselor', require('./src/routes/counselor/counselorRoutes'));

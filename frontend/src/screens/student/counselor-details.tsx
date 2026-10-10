@@ -65,6 +65,13 @@ export default function CounselorDetailsScreen() {
     });
   };
 
+  const handleMessageCounselor = () => {
+    navigation.navigate('StudentChat', {
+      counselorId: id,
+      counselorName: counselor.name,
+    });
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -221,6 +228,13 @@ export default function CounselorDetailsScreen() {
         </View>
 
         {/* Availability Button */}
+        <Pressable
+          style={({ pressed }) => [styles.messageButton, pressed && { opacity: 0.82 }]}
+          onPress={handleMessageCounselor}
+        >
+          <Text style={styles.messageButtonText}>Message Counselor</Text>
+        </Pressable>
+
         <Pressable
           style={styles.availabilityButton}
           onPress={handleViewAvailability}
@@ -464,6 +478,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  messageButton: {
+    height: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#EF806B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 10,
+  },
+
+  messageButtonText: {
+    color: '#C85F4E',
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   availabilityButtonText: {

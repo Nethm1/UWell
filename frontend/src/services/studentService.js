@@ -75,6 +75,20 @@ export const studentService = {
     return response.data;
   },
 
+  getCounselorConversation: async (counselorId) => {
+    const response = await api.get(`/student/messages/${encodeURIComponent(counselorId)}`);
+    return response.data;
+  },
+
+  sendCounselorMessage: async (counselorId, message) => {
+    const response = await api.post(
+      `/student/messages/${encodeURIComponent(counselorId)}`,
+      message,
+      message.attachment ? { timeout: 60000 } : undefined,
+    );
+    return response.data;
+  },
+
   getCounselorAvailability: async (counselorId) => {
     const params = counselorId ? `?counselorId=${encodeURIComponent(counselorId)}` : '';
     const response = await api.get(`/student/counselor-availability${params}`);

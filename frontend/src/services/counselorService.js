@@ -86,8 +86,9 @@ export const counselorService = {
     return response.data;
   },
 
-  sendMessage: async (studentId, text) => {
-    const response = await api.post('/counselor/messages', { studentId, text });
+  sendMessage: async (studentId, message) => {
+    const payload = typeof message === 'string' ? { text: message } : message;
+    const response = await api.post('/counselor/messages', { studentId, ...payload }, payload.attachment ? { timeout: 60000 } : undefined);
     return response.data;
   },
 

@@ -230,6 +230,18 @@ export default function AppointmentDetailsScreen() {
           </View>
         </View>
 
+        {!!appt.counselorId && !isCancelled && (
+          <Pressable
+            style={({ pressed }) => [styles.messageCounselorBtn, pressed && { opacity: 0.82 }]}
+            onPress={() => navigation.navigate('StudentChat', {
+              counselorId: String(appt.counselorId),
+              counselorName: appt.counselorName,
+            })}
+          >
+            <Text style={styles.messageCounselorText}>Message Counselor</Text>
+          </Pressable>
+        )}
+
         {/* ── Details ── */}
         <Text style={styles.sectionTitle}>Appointment Details</Text>
         <View style={styles.detailCard}>
@@ -342,6 +354,8 @@ const styles = StyleSheet.create({
   avatarCircle:    { width: 52, height: 52, borderRadius: 26, backgroundColor: '#FFF1EC', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   counselorName:   { fontSize: 15, fontWeight: '700', color: DARK, marginBottom: 3 },
   counselorSpec:   { fontSize: 12, color: CORAL },
+  messageCounselorBtn: { height: 46, backgroundColor: '#FFF1EC', borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 10, borderWidth: 1, borderColor: '#F4CFC5' },
+  messageCounselorText: { fontSize: 13, fontWeight: '700', color: '#C85F4E' },
 
   detailCard:      { backgroundColor: WHITE, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#F0E2DC' },
   detailRow:       { flexDirection: 'row', alignItems: 'center' },
