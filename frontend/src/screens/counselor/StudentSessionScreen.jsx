@@ -8,7 +8,9 @@ import {
   StatusBar,
   TextInput,
   Alert,
-  Linking
+  Linking,
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '../../theme';
@@ -21,26 +23,60 @@ const StudentSessionScreen = ({ route, navigation }) => {
   const [student, setStudent] = useState(null);
   const [sessionNotes, setSessionNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     loadStudentDetails();
   }, [studentId]);
 
   const loadStudentDetails = async () => {
-    const data = await counselorService.getStudentById(studentId);
-    setStudent(data);
-    setSessionNotes(data?.sessionNotesHistory || '');
+    try {
+      setLoadError('');
+      const data = await counselorService.getStudentById(studentId);
+      setStudent(data);
+      setSessionNotes(data?.sessionNotesHistory || '');
+      setHasUnsavedChanges(false);
+    } catch (error) {
+      setLoadError(error.response?.data?.message || 'Could not load this student record.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSaveNotes = async () => {
+    if (!hasUnsavedChanges || isSaving) return;
     setIsSaving(true);
-    const result = await counselorService.saveSessionNotes(studentId, sessionNotes);
-    setIsSaving(false);
-    setStudent(prev => prev ? { ...prev, sessionNotesHistory: sessionNotes } : prev);
-    Alert.alert('Saved', 'Private session notes saved successfully.');
+    try {
+      const updated = await counselorService.saveSessionNotes(studentId, sessionNotes);
+      setStudent((prev) => prev ? { ...prev, sessionNotesHistory: updated.sessionNotesHistory ?? sessionNotes } : prev);
+      setHasUnsavedChanges(false);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert('Private session notes saved.');
+      else Alert.alert('Saved', 'Private session notes saved successfully.');
+    } catch (error) {
+      const message = error.response?.data?.message || 'Could not save notes. Please try again.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(message);
+      else Alert.alert('Save failed', message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  if (!student) return null;
+  if (isLoading) {
+    return <View style={styles.loadingState}><ActivityIndicator color={colors.primary} /><Text style={styles.loadingText}>Loading student record…</Text></View>;
+  }
+  if (!student) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.unavailableState}>
+          <Text style={styles.unavailableTitle}>Student record unavailable</Text>
+          <Text style={styles.unavailableText}>{loadError || 'This student may not be linked to your account.'}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadStudentDetails}><Text style={styles.retryButtonText}>Try again</Text></TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const studentPhone = (student.phone || '').replace(/[^\d+]/g, '');
   const hasPhone = studentPhone.length > 0;
@@ -112,7 +148,10 @@ const StudentSessionScreen = ({ route, navigation }) => {
 
           <TouchableOpacity
             style={[styles.primaryActionBtn, styles.messageBtn]}
-            onPress={() => navigation.navigate('StudentChat', { studentId: student.id, studentName: student.name })}
+            onPress={() => navigation.getParent()?.navigate('Messages', {
+              screen: 'StudentChat',
+              params: { studentId: student.id, studentName: student.name },
+            })}
             accessibilityLabel="Message Student"
           >
             <Text style={styles.messageBtnText}>💬 Message Student</Text>
@@ -169,17 +208,17 @@ const StudentSessionScreen = ({ route, navigation }) => {
             placeholder="Type confidential session notes here..."
             placeholderTextColor={colors.textSecondary}
             value={sessionNotes}
-            onChangeText={setSessionNotes}
+            onChangeText={(value) => { setSessionNotes(value); setHasUnsavedChanges(true); }}
             textAlignVertical="top"
           />
           <TouchableOpacity
             style={styles.saveNotesBtn}
             onPress={handleSaveNotes}
-            disabled={isSaving}
+            disabled={isSaving || !hasUnsavedChanges}
             accessibilityLabel="Save Notes"
           >
             <Text style={styles.saveNotesText}>
-              {isSaving ? 'Saving...' : 'Save Notes'}
+              {isSaving ? 'Saving…' : hasUnsavedChanges ? 'Save Notes' : 'All changes saved'}
             </Text>
           </TouchableOpacity>
         </Card>
@@ -189,6 +228,18 @@ const StudentSessionScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.creamBackground,
+  },
+  loadingText: { marginTop: 10, color: colors.textSecondary, fontSize: 13 },
+  unavailableState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: colors.creamBackground },
+  unavailableTitle: { fontSize: 18, fontWeight: '700', color: colors.darkText, textAlign: 'center' },
+  unavailableText: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 7, lineHeight: 19 },
+  retryButton: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10, marginTop: 16 },
+  retryButtonText: { color: colors.white, fontSize: 13, fontWeight: '700' },
   safeArea: {
     flex: 1,
     backgroundColor: colors.creamBackground

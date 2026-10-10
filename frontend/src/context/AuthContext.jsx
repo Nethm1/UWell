@@ -47,12 +47,12 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      setUser(null);
-      setIsAuthenticated(false);
-      await AsyncStorage.removeItem('user');
-      await AsyncStorage.removeItem('token');
+      await AsyncStorage.multiRemove(['user', 'token']);
     } catch (error) {
       console.error('Error during logout:', error);
+    } finally {
+      setUser(null);
+      setIsAuthenticated(false);
     }
   };
 

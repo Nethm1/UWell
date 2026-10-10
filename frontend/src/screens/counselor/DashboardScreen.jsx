@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -201,18 +202,22 @@ const DashboardScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Decorative calendar illustration */}
-            <View style={styles.loadCalendarDecor}>
-              <View style={styles.calendarIllus}>
-                <View style={styles.calendarTop} />
-                <View style={styles.calendarBody}>
-                  <Feather name="check-circle" size={18} color={colors.primary} />
-                </View>
+            <Animated.View
+              style={[
+                styles.loadPhotoWrap,
+                { transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [5, 0] }) }] }
+              ]}
+            >
+              <Image
+                source={require('../../../assets/counseling-session.jpg')}
+                style={styles.loadPhoto}
+                resizeMode="cover"
+                accessibilityLabel="Counselor speaking with a student in a welcoming office"
+              />
+              <View style={styles.photoBadge}>
+                <Feather name="heart" size={13} color="#fff" />
               </View>
-              <View style={styles.clockDecor}>
-                <Ionicons name="time-outline" size={18} color={colors.primary} />
-              </View>
-            </View>
+            </Animated.View>
           </View>
 
           {/* ── AVAILABILITY BANNER ─────────────────────────────────── */}
@@ -284,7 +289,10 @@ const DashboardScreen = ({ navigation }) => {
                   key={s.id}
                   activeOpacity={0.8}
                   style={styles.notesCard}
-                  onPress={() => navigation.navigate('StudentSession', { studentId: s.id })}
+                  onPress={() => navigation.navigate('Students', {
+                    screen: 'StudentSession',
+                    params: { studentId: s.id },
+                  })}
                   accessibilityLabel={`View notes for ${s.name}`}
                 >
                   <View style={styles.notesCardHeader}>
@@ -315,9 +323,9 @@ const DashboardScreen = ({ navigation }) => {
                 activeOpacity={0.8}
                 style={styles.scheduleCard}
                 onPress={() =>
-                  navigation.navigate('StudentSession', {
-                    studentId: item.studentId,
-                    appointment: item
+                  navigation.navigate('Students', {
+                    screen: 'StudentSession',
+                    params: { studentId: item.studentId, appointment: item },
                   })
                 }
                 accessibilityLabel={`View session for ${item.studentName}`}
@@ -530,50 +538,33 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     flex: 1
   },
-  loadCalendarDecor: {
-    width: 72,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative'
-  },
-  calendarIllus: {
-    width: 54,
-    height: 58,
-    borderRadius: 10,
-    backgroundColor: colors.white,
+  loadPhotoWrap: {
+    width: 88,
+    height: 92,
+    borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: colors.primary,
+    marginLeft: spacing.sm,
+    backgroundColor: '#D9E8E4',
+    shadowColor: '#243B36',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowOpacity: 0.16,
+    shadowRadius: 5,
     elevation: 3,
-    alignItems: 'center'
   },
-  calendarTop: {
+  loadPhoto: {
     width: '100%',
-    height: 14,
-    backgroundColor: colors.primary
+    height: '100%',
   },
-  calendarBody: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  clockDecor: {
+  photoBadge: {
     position: 'absolute',
-    bottom: -4,
-    right: -4,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.white,
+    right: 5,
+    bottom: 5,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2
   },
 
   // ── Availability Card ─────────────────────────────────────

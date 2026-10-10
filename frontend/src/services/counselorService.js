@@ -2,18 +2,10 @@ import api from './api';
 import {
   initialCounselorProfile,
   initialPerformanceStats,
-  initialAppointments,
-  initialStudents,
-  initialMessages,
-  initialAvailabilitySchedule
 } from '../data/counselorMockData';
 
 // Local reactive storage for development & offline mode
 let profileData = { ...initialCounselorProfile };
-let appointmentsData = [...initialAppointments];
-let studentsData = [...initialStudents];
-let messagesData = [...initialMessages];
-let availabilityData = [...initialAvailabilitySchedule];
 
 export const counselorService = {
   // Counselor Profile
@@ -48,171 +40,81 @@ export const counselorService = {
 
   // Appointments
   getAppointments: async () => {
-    try {
-      const response = await api.get('/counselor/appointments');
-      return response.data;
-    } catch (error) {
-      return appointmentsData;
-    }
+    const response = await api.get('/counselor/appointments');
+    return response.data;
   },
 
   getAppointmentById: async (appointmentId) => {
-    try {
-      const response = await api.get(`/counselor/appointments/${appointmentId}`);
-      return response.data;
-    } catch (error) {
-      return appointmentsData.find((a) => a.id === appointmentId) || appointmentsData[0];
-    }
+    const response = await api.get(`/counselor/appointments/${appointmentId}`);
+    return response.data;
   },
 
   updateAppointmentStatus: async (appointmentId, status) => {
-    try {
-      const response = await api.put(`/counselor/appointments/${appointmentId}`, { status });
-      return response.data;
-    } catch (error) {
-      appointmentsData = appointmentsData.map((a) =>
-        a.id === appointmentId ? { ...a, status } : a
-      );
-      return appointmentsData.find((a) => a.id === appointmentId);
-    }
+    const response = await api.put(`/counselor/appointments/${appointmentId}`, { status });
+    return response.data;
   },
 
   // Students
   getStudents: async () => {
-    try {
-      const response = await api.get('/counselor/students');
-      return response.data;
-    } catch (error) {
-      return studentsData;
-    }
+    const response = await api.get('/counselor/students');
+    return response.data;
   },
 
   getStudentById: async (studentId) => {
-    try {
-      const response = await api.get(`/counselor/students/${studentId}`);
-      return response.data;
-    } catch (error) {
-      return studentsData.find((s) => s.id === studentId) || studentsData[0];
-    }
+    const response = await api.get(`/counselor/students/${studentId}`);
+    return response.data;
   },
 
   saveSessionNotes: async (studentId, notes) => {
-    try {
-      const response = await api.post(`/counselor/students/${studentId}/notes`, { notes });
-      return response.data;
-    } catch (error) {
-      studentsData = studentsData.map((s) =>
-        s.id === studentId ? { ...s, sessionNotesHistory: notes } : s
-      );
-      const updated = studentsData.find((s) => s.id === studentId) || { success: true, notes };
-      return updated;
-    }
+    const response = await api.post(`/counselor/students/${studentId}/notes`, { notes });
+    return response.data;
+  },
+
+  updateStudentStatus: async (studentId, status) => {
+    const response = await api.patch(`/counselor/students/${studentId}/status`, { status });
+    return response.data;
   },
 
   // Messages & Student Chat
   getMessages: async () => {
-    try {
-      const response = await api.get('/counselor/messages');
-      return response.data;
-    } catch (error) {
-      return messagesData;
-    }
+    const response = await api.get('/counselor/messages');
+    return response.data;
   },
 
   getMessageByStudentId: async (studentId) => {
-    try {
-      const response = await api.get(`/counselor/messages/${studentId}`);
-      return response.data;
-    } catch (error) {
-      return (
-        messagesData.find((m) => m.studentId === studentId) ||
-        messagesData[0]
-      );
-    }
+    const response = await api.get(`/counselor/messages/${studentId}`);
+    return response.data;
   },
 
   sendMessage: async (studentId, text) => {
-    try {
-      const response = await api.post('/counselor/messages', { studentId, text });
-      return response.data;
-    } catch (error) {
-      const newMsg = {
-        id: `c-${Date.now()}`,
-        sender: 'counselor',
-        text,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      messagesData = messagesData.map((m) => {
-        if (m.studentId === studentId || m.id === studentId) {
-          return {
-            ...m,
-            lastMessage: text,
-            timestamp: 'Just now',
-            chatHistory: [...(m.chatHistory || []), newMsg]
-          };
-        }
-        return m;
-      });
-
-      return newMsg;
-    }
+    const response = await api.post('/counselor/messages', { studentId, text });
+    return response.data;
   },
 
   // Availability CRUD
   getAvailability: async () => {
-    try {
-      const response = await api.get('/counselor/availability');
-      return response.data;
-    } catch (error) {
-      return availabilityData;
-    }
+    const response = await api.get('/counselor/availability');
+    return response.data;
   },
 
   createAvailability: async (slotData) => {
-    try {
-      const response = await api.post('/counselor/availability', slotData);
-      return response.data;
-    } catch (error) {
-      const newSlot = {
-        id: `av-${Date.now()}`,
-        day: slotData.day,
-        active: true,
-        startTime: slotData.startTime,
-        endTime: slotData.endTime,
-        slots: slotData.slots || [slotData.startTime]
-      };
-      // If day exists, replace or append
-      const existingIndex = availabilityData.findIndex((a) => a.day.toLowerCase() === slotData.day.toLowerCase());
-      if (existingIndex !== -1) {
-        availabilityData[existingIndex] = { ...availabilityData[existingIndex], ...newSlot };
-      } else {
-        availabilityData.push(newSlot);
-      }
-      return newSlot;
-    }
+    const response = await api.post('/counselor/availability', slotData);
+    return response.data;
+  },
+
+  saveAvailability: async (schedule) => {
+    const response = await api.put('/counselor/availability', { schedule });
+    return response.data;
   },
 
   updateAvailability: async (id, updatedFields) => {
-    try {
-      const response = await api.put(`/counselor/availability/${id}`, updatedFields);
-      return response.data;
-    } catch (error) {
-      availabilityData = availabilityData.map((item) =>
-        item.id === id ? { ...item, ...updatedFields } : item
-      );
-      return availabilityData.find((item) => item.id === id);
-    }
+    const response = await api.put(`/counselor/availability/${id}`, updatedFields);
+    return response.data;
   },
 
   deleteAvailability: async (id) => {
-    try {
-      await api.delete(`/counselor/availability/${id}`);
-      return { success: true };
-    } catch (error) {
-      availabilityData = availabilityData.filter((item) => item.id !== id);
-      return { success: true };
-    }
+    const response = await api.delete(`/counselor/availability/${id}`);
+    return response.data;
   },
 
   // Video Session placeholder launcher

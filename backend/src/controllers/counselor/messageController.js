@@ -1,75 +1,104 @@
 const CounselorMessage = require('../../models/counselor/CounselorMessage');
 const CounselorStudent = require('../../models/counselor/CounselorStudent');
+const { counselorKey } = require('./_scope');
 
-// GET /api/counselor/messages
+const toConversationSummary = (student, conversation) => ({
+  id: conversation?.id || `chat-${student.id}`,
+  studentId: student.id,
+  counselorId: student.counselorId,
+  studentName: student.name,
+  avatarInitials: student.avatarInitials,
+  lastMessage: conversation?.lastMessage || 'Start a conversation',
+  timestamp: conversation?.timestamp || '',
+  unread: conversation?.unread || false,
+  chatHistory: conversation?.chatHistory || [],
+});
+
+// GET /api/counselor/messages — include an empty conversation for every booked student.
 exports.getMessages = async (req, res) => {
   try {
-    const messages = await CounselorMessage.find().sort({ createdAt: -1 });
-    return res.status(200).json(messages);
+    const key = counselorKey(req);
+    const [students, conversations] = await Promise.all([
+      CounselorStudent.find({ counselorId: key }).sort({ createdAt: -1 }),
+      CounselorMessage.find({ counselorId: key }).sort({ updatedAt: -1 }),
+    ]);
+    const conversationByStudent = new Map(conversations.map((item) => [item.studentId, item.toJSON()]));
+    return res.status(200).json(students.map((student) => {
+      const client = student.toJSON();
+      return toConversationSummary(client, conversationByStudent.get(client.id));
+    }));
   } catch (error) {
-    console.error('❌ counselor getMessages error:', error);
+    console.error('counselor getMessages error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch messages' });
   }
 };
 
-// GET /api/counselor/messages/:studentId
+// GET /api/counselor/messages/:studentId — a booked student may have no messages yet.
 exports.getMessageByStudentId = async (req, res) => {
   try {
-    const message = await CounselorMessage.findOne({ studentId: req.params.studentId });
-    if (!message) {
-      return res.status(404).json({ success: false, message: 'Conversation not found' });
-    }
-    return res.status(200).json(message);
+    const key = counselorKey(req);
+    const student = await CounselorStudent.findOne({ _id: req.params.studentId, counselorId: key });
+    if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
+
+    const client = student.toJSON();
+    const conversation = await CounselorMessage.findOne({
+      studentId: client.id,
+      counselorId: key,
+    });
+    return res.status(200).json(toConversationSummary(client, conversation?.toJSON()));
   } catch (error) {
-    console.error('❌ counselor getMessageByStudentId error:', error);
+    console.error('counselor getMessageByStudentId error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch conversation' });
   }
 };
 
-// POST /api/counselor/messages
+// POST /api/counselor/messages — only message students booked with this counselor.
 exports.sendMessage = async (req, res) => {
   try {
-    const { studentId, text } = req.body;
+    const key = counselorKey(req);
+    const studentId = String(req.body.studentId || '');
+    const text = typeof req.body.text === 'string' ? req.body.text.trim() : '';
     if (!studentId || !text) {
       return res.status(400).json({ success: false, message: 'studentId and text are required' });
     }
-
-    const student = await CounselorStudent.findById(studentId);
-    if (!student) {
-      return res.status(404).json({ success: false, message: 'Student not found' });
+    if (text.length > 4000) {
+      return res.status(400).json({ success: false, message: 'Message must be 4,000 characters or fewer' });
     }
+
+    const student = await CounselorStudent.findOne({ _id: studentId, counselorId: key });
+    if (!student) return res.status(404).json({ success: false, message: 'Booked student not found' });
 
     const newMsg = {
       id: `c-${Date.now()}`,
       sender: 'counselor',
       text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toISOString(),
     };
+    const conversation = await CounselorMessage.findOne({ studentId, counselorId: key });
 
-    const conversation = await CounselorMessage.findOne({ studentId });
     if (conversation) {
-      const chatHistory = [...(conversation.chatHistory || []), newMsg];
-      conversation.chatHistory = chatHistory;
+      conversation.chatHistory = [...(conversation.chatHistory || []), newMsg];
       conversation.lastMessage = text;
-      conversation.timestamp = 'Just now';
+      conversation.timestamp = newMsg.timestamp;
+      conversation.unread = false;
       await conversation.save();
     } else {
       await CounselorMessage.create({
-        _id: `msg-${Date.now()}`,
+        _id: `chat-${key}-${studentId}`,
         studentId,
-        counselorId: 'c1',
+        counselorId: key,
         studentName: student.name,
         avatarInitials: student.avatarInitials,
         lastMessage: text,
-        timestamp: 'Just now',
+        timestamp: newMsg.timestamp,
         unread: false,
         chatHistory: [newMsg],
       });
     }
 
-    return res.status(200).json(newMsg);
+    return res.status(201).json(newMsg);
   } catch (error) {
-    console.error('❌ counselor sendMessage error:', error);
+    console.error('counselor sendMessage error:', error);
     return res.status(500).json({ success: false, message: 'Failed to send message' });
   }
 };

@@ -3,6 +3,8 @@ const Management = require('../../models/management/Management');
 const Counselor = require('../../models/counselor/Counselor');
 const Welfare = require('../../models/welfare/Welfare');
 const Student = require('../../models/student/Student');
+const Appointment = require('../../models/counselor/Appointment');
+const ManagementSettings = require('../../models/management/ManagementSettings');
 
 const signToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, {
@@ -493,4 +495,483 @@ exports.logoutManagement = async (req, res) => {
     success: true,
     message: 'Logged out successfully',
   });
+};
+
+// ─── User directory helpers ───────────────────────────────────────────────────
+const USER_MODELS = [
+  { role: 'student', Model: Student },
+  { role: 'counselor', Model: Counselor },
+  { role: 'welfare', Model: Welfare },
+  { role: 'management', Model: Management },
+];
+
+const normalizeUser = (doc, role) => {
+  const o = doc.toSafeObject ? doc.toSafeObject() : doc.toObject();
+  return {
+    id: o._id ? o._id.toString() : o.id,
+    _id: o._id ? o._id.toString() : o.id,
+    role,
+    firstName: o.firstName,
+    lastName: o.lastName,
+    fullName: o.fullName || `${o.firstName || ''} ${o.lastName || ''}`.trim(),
+    email: o.email,
+    phone: o.phone || '',
+    identifier: o.studentId || o.staffId || o.employeeId || '',
+    studentId: o.studentId,
+    staffId: o.staffId,
+    employeeId: o.employeeId,
+    department: o.department,
+    position: o.position,
+    isActive: o.isActive !== undefined ? o.isActive : true,
+    isApproved: o.isApproved !== undefined ? o.isApproved : true,
+    approvalStatus: o.approvalStatus,
+    lastLogin: o.lastLogin,
+    createdAt: o.createdAt,
+  };
+};
+
+// Locate a user by id across every role collection.
+const findUserAcrossCollections = async (id, roleHint) => {
+  const candidates = roleHint
+    ? USER_MODELS.filter((m) => m.role === String(roleHint).toLowerCase())
+    : USER_MODELS;
+
+  for (const { role, Model } of candidates) {
+    const doc = await Model.findById(id);
+    if (doc) return { role, Model, doc };
+  }
+  return null;
+};
+
+// ── Management Dashboard Overview ─────────────────────────────────────────────
+exports.getManagementDashboard = async (req, res) => {
+  try {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [
+      totalStudents,
+      activeStudents,
+      newStudentsThisMonth,
+      totalCounselors,
+      approvedCounselors,
+      pendingCounselors,
+      totalWelfareOfficers,
+      approvedWelfareOfficers,
+      pendingWelfare,
+      totalManagement,
+      totalAppointments,
+      upcomingAppointments,
+      completedAppointments,
+      cancelledAppointments,
+      recentCounselors,
+      recentWelfare,
+      recentAppointments,
+    ] = await Promise.all([
+      Student.countDocuments({}),
+      Student.countDocuments({ isActive: true }),
+      Student.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      Counselor.countDocuments({}),
+      Counselor.countDocuments({ approvalStatus: 'approved' }),
+      Counselor.countDocuments({ approvalStatus: 'pending' }),
+      Welfare.countDocuments({}),
+      Welfare.countDocuments({ approvalStatus: 'approved' }),
+      Welfare.countDocuments({ approvalStatus: 'pending' }),
+      Management.countDocuments({}),
+      Appointment.countDocuments({}),
+      Appointment.countDocuments({ status: { $in: ['upcoming', 'Upcoming', 'scheduled', 'Scheduled'] } }),
+      Appointment.countDocuments({ status: { $in: ['completed', 'Completed', 'done'] } }),
+      Appointment.countDocuments({ status: { $in: ['cancelled', 'Cancelled', 'canceled'] } }),
+      Counselor.find({ approvalStatus: 'pending' }).sort({ createdAt: -1 }).limit(5),
+      Welfare.find({ approvalStatus: 'pending' }).sort({ createdAt: -1 }).limit(5),
+      Appointment.find()
+        .populate('student', 'firstName lastName studentId')
+        .populate('counselor', 'firstName lastName specialization')
+        .sort({ createdAt: -1 })
+        .limit(5),
+    ]);
+
+    const recentRequests = [
+      ...recentCounselors.map((c) => ({
+        id: c._id.toString(),
+        role: 'counselor',
+        fullName: c.fullName,
+        email: c.email,
+        createdAt: c.createdAt,
+      })),
+      ...recentWelfare.map((w) => ({
+        id: w._id.toString(),
+        role: 'welfare',
+        fullName: w.fullName,
+        email: w.email,
+        createdAt: w.createdAt,
+      })),
+    ]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 5);
+
+    const recentAppointmentsMapped = recentAppointments.map((a) => ({
+      id: a._id.toString(),
+      studentName:
+        a.studentName ||
+        (a.student ? `${a.student.firstName || ''} ${a.student.lastName || ''}`.trim() : 'Student'),
+      counselorName:
+        a.counselorName ||
+        (a.counselor ? `${a.counselor.firstName || ''} ${a.counselor.lastName || ''}`.trim() : 'Counselor'),
+      date: a.date,
+      time: a.time,
+      status: a.status,
+    }));
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        totalUsers: totalStudents + totalCounselors + totalWelfareOfficers + totalManagement,
+        totalStudents,
+        activeStudents,
+        newStudentsThisMonth,
+        totalCounselors,
+        approvedCounselors,
+        pendingCounselors,
+        totalWelfareOfficers,
+        approvedWelfareOfficers,
+        pendingWelfare,
+        totalManagement,
+        totalPendingRequests: pendingCounselors + pendingWelfare,
+        totalAppointments,
+        upcomingAppointments,
+        completedAppointments,
+        cancelledAppointments,
+      },
+      recentRequests,
+      recentAppointments: recentAppointmentsMapped,
+    });
+  } catch (error) {
+    console.error('❌ getManagementDashboard error:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching management dashboard' });
+  }
+};
+
+// ── All Appointments (management view) ────────────────────────────────────────
+exports.getManagementAppointments = async (req, res) => {
+  try {
+    const appointments = await Appointment.find()
+      .populate('student', 'firstName lastName studentId email faculty degreeProgram yearOfStudy phone')
+      .populate('counselor', 'firstName lastName staffId email specialization officeLocation phone')
+      .sort({ createdAt: -1 });
+
+    const mapped = appointments.map((a) => {
+      const studentName =
+        a.studentName ||
+        (a.student ? `${a.student.firstName || ''} ${a.student.lastName || ''}`.trim() : 'Unknown Student');
+      const counselorName =
+        a.counselorName ||
+        (a.counselor ? `${a.counselor.firstName || ''} ${a.counselor.lastName || ''}`.trim() : 'Unknown Counselor');
+
+      return {
+        _id: a._id.toString(),
+        id: a._id.toString(),
+        studentId: a.student?._id?.toString() || null,
+        studentName,
+        studentRegNo: a.student?.studentId || '',
+        studentEmail: a.student?.email || '',
+        studentFaculty: a.student?.faculty || '',
+        studentDegree: a.student?.degreeProgram || '',
+        studentYear: a.student?.yearOfStudy || '',
+        studentPhone: a.student?.phone || '',
+        counselorId: a.counselor?._id?.toString() || null,
+        counselorName,
+        counselorEmail: a.counselor?.email || '',
+        counselorPhone: a.counselor?.phone || '',
+        counselorSpecialization: a.counselorSpecialization || a.counselor?.specialization || 'Student Counselling',
+        counselorOffice: a.counselor?.officeLocation || '',
+        date: a.date,
+        time: a.time,
+        sessionType: a.sessionType,
+        status: a.status,
+        notes: a.notes || '',
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+      };
+    });
+
+    res.status(200).json({ success: true, count: mapped.length, appointments: mapped });
+  } catch (error) {
+    console.error('❌ getManagementAppointments error:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching appointments' });
+  }
+};
+
+// ── Usage Details ─────────────────────────────────────────────────────────────
+exports.getUsageDetails = async (req, res) => {
+  try {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [
+      totalStudents,
+      totalCounselors,
+      totalWelfare,
+      totalManagement,
+      activeStudents,
+      activeCounselors,
+      activeWelfare,
+      activeManagement,
+      newStudents,
+      newCounselors,
+      newWelfare,
+      newManagement,
+      totalAppointments,
+      appointments,
+    ] = await Promise.all([
+      Student.countDocuments({}),
+      Counselor.countDocuments({}),
+      Welfare.countDocuments({}),
+      Management.countDocuments({}),
+      Student.countDocuments({ isActive: true }),
+      Counselor.countDocuments({ isActive: true }),
+      Welfare.countDocuments({ isActive: true }),
+      Management.countDocuments({ isActive: true }),
+      Student.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      Counselor.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      Welfare.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      Management.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      Appointment.countDocuments({}),
+      Appointment.find().select('time status').lean(),
+    ]);
+
+    const totalUsers = totalStudents + totalCounselors + totalWelfare + totalManagement;
+    const activeUsers = activeStudents + activeCounselors + activeWelfare + activeManagement;
+    const newUsersThisMonth = newStudents + newCounselors + newWelfare + newManagement;
+    const averageSessionsPerUser = totalUsers > 0 ? Number((totalAppointments / totalUsers).toFixed(1)) : 0;
+
+    // Department breakdown by role
+    const deptCounts = [
+      { department: 'Counseling', count: totalCounselors + activeStudents },
+      { department: 'Welfare', count: totalWelfare },
+      { department: 'Management', count: totalManagement },
+    ];
+    const deptTotal = deptCounts.reduce((sum, d) => sum + d.count, 0) || 1;
+    const departmentUsage = deptCounts.map((d) => ({
+      department: d.department,
+      sessions: d.count,
+      percentage: Math.round((d.count / deptTotal) * 100),
+    }));
+
+    // Peak usage time — most frequent appointment slot
+    const timeFrequency = {};
+    appointments.forEach((a) => {
+      if (!a.time) return;
+      timeFrequency[a.time] = (timeFrequency[a.time] || 0) + 1;
+    });
+    const peakTimeEntry = Object.entries(timeFrequency).sort((a, b) => b[1] - a[1])[0];
+    const peakUsageTime = peakTimeEntry ? peakTimeEntry[0] : '2:00 PM - 4:00 PM';
+
+    const mostActiveDepartment =
+      departmentUsage.slice().sort((a, b) => b.sessions - a.sessions)[0]?.department || 'Counseling';
+
+    res.status(200).json({
+      success: true,
+      usageData: {
+        totalUsers,
+        activeUsers,
+        newUsersThisMonth,
+        averageSessionsPerUser,
+        mostActiveDepartment,
+        peakUsageTime,
+      },
+      departmentUsage,
+    });
+  } catch (error) {
+    console.error('❌ getUsageDetails error:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching usage details' });
+  }
+};
+
+// ── Generate Usage Report ─────────────────────────────────────────────────────
+exports.generateUsageReport = async (req, res) => {
+  try {
+    const { dateRange = 'This Month', reportType = 'Appointments' } = req.body || {};
+
+    const [totalAppointments, completedAppointments, cancelledAppointments, totalStudents] = await Promise.all([
+      Appointment.countDocuments({}),
+      Appointment.countDocuments({ status: { $in: ['completed', 'Completed', 'done'] } }),
+      Appointment.countDocuments({ status: { $in: ['cancelled', 'Cancelled', 'canceled'] } }),
+      Student.countDocuments({}),
+    ]);
+
+    const totalRecords = reportType === 'User Activity' ? totalStudents : totalAppointments;
+    const completionRate =
+      totalAppointments > 0 ? Math.round((completedAppointments / totalAppointments) * 100) : 0;
+    // Satisfaction proxy derived from completion vs cancellation (no rating field exists yet).
+    const denominator = completedAppointments + cancelledAppointments;
+    const avgRating = denominator > 0 ? Number((3.5 + (completedAppointments / denominator) * 1.5).toFixed(1)) : 0;
+
+    res.status(200).json({
+      success: true,
+      filters: { dateRange, reportType },
+      preview: {
+        totalRecords,
+        completionRate,
+        avgRating,
+      },
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('❌ generateUsageReport error:', error);
+    res.status(500).json({ success: false, message: 'Server error generating usage report' });
+  }
+};
+
+// ── List All Users Across Roles ───────────────────────────────────────────────
+exports.getAllUsers = async (req, res) => {
+  try {
+    const { role, search } = req.query;
+    const roles = role ? USER_MODELS.filter((m) => m.role === String(role).toLowerCase()) : USER_MODELS;
+
+    const results = await Promise.all(
+      roles.map(async ({ role: r, Model }) => {
+        const docs = await Model.find({}).sort({ createdAt: -1 });
+        return docs.map((d) => normalizeUser(d, r));
+      })
+    );
+
+    let users = results.flat();
+
+    if (search) {
+      const term = String(search).toLowerCase();
+      users = users.filter(
+        (u) =>
+          (u.fullName || '').toLowerCase().includes(term) ||
+          (u.email || '').toLowerCase().includes(term) ||
+          (u.identifier || '').toLowerCase().includes(term)
+      );
+    }
+
+    users.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+    res.status(200).json({ success: true, count: users.length, users });
+  } catch (error) {
+    console.error('❌ getAllUsers error:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching users' });
+  }
+};
+
+// ── Update User ───────────────────────────────────────────────────────────────
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const roleHint = req.body.role || req.query.role;
+    const found = await findUserAcrossCollections(id, roleHint);
+
+    if (!found) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const { doc } = found;
+    const editable = [
+      'firstName',
+      'lastName',
+      'phone',
+      'department',
+      'position',
+      'isActive',
+      'isApproved',
+      'status',
+      'officeLocation',
+      'bio',
+      'profilePicture',
+    ];
+
+    editable.forEach((field) => {
+      if (req.body[field] !== undefined) doc[field] = req.body[field];
+    });
+
+    await doc.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'User updated successfully',
+      user: normalizeUser(doc, found.role),
+    });
+  } catch (error) {
+    console.error('❌ updateUser error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Server error updating user' });
+  }
+};
+
+// ── Delete User ───────────────────────────────────────────────────────────────
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const roleHint = req.query.role || req.body?.role;
+    const found = await findUserAcrossCollections(id, roleHint);
+
+    if (!found) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    await found.Model.findByIdAndDelete(id);
+
+    res.status(200).json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('❌ deleteUser error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Server error deleting user' });
+  }
+};
+
+// ── System Settings ───────────────────────────────────────────────────────────
+exports.getSystemSettings = async (req, res) => {
+  try {
+    const settings = await ManagementSettings.findOneAndUpdate(
+      { key: 'system' },
+      { $setOnInsert: { key: 'system' } },
+      { new: true, upsert: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      settings: settings.toSafeObject(),
+      display: settings.toSettingsView(),
+    });
+  } catch (error) {
+    console.error('❌ getSystemSettings error:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching system settings' });
+  }
+};
+
+exports.updateSystemSettings = async (req, res) => {
+  try {
+    const editable = [
+      'dataEncryption',
+      'twoFactorAuth',
+      'sessionTimeoutMinutes',
+      'auditLogging',
+      'dataRetentionYears',
+      'privacyMode',
+    ];
+
+    const updates = {};
+    editable.forEach((field) => {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    });
+
+    const settings = await ManagementSettings.findOneAndUpdate(
+      { key: 'system' },
+      { $set: updates, $setOnInsert: { key: 'system' } },
+      { new: true, upsert: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'System settings updated successfully',
+      settings: settings.toSafeObject(),
+      display: settings.toSettingsView(),
+    });
+  } catch (error) {
+    console.error('❌ updateSystemSettings error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Server error updating system settings' });
+  }
 };

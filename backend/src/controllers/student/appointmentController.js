@@ -1,6 +1,7 @@
 const Appointment = require('../../models/student/Appointment');
 const Student = require('../../models/student/Student');
 const CounselorAppointment = require('../../models/counselor/CounselorAppointment');
+const CounselorStudent = require('../../models/counselor/CounselorStudent');
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CREATE  POST /api/student/appointments
@@ -43,6 +44,35 @@ exports.createAppointment = async (req, res) => {
         ? `${(student.firstName || '')[0]}${(student.lastName || '')[0]}`.toUpperCase()
         : 'ST';
 
+      // Keep a counselor-specific client record so counselors can find and
+      // message students who booked them. A composite key permits a student
+      // to work with more than one counselor without sharing private notes.
+      if (counselorId && student) {
+        const counselorClientId = `client-${String(counselorId)}-${String(student._id)}`;
+        const counselorClient = await CounselorStudent.findOneAndUpdate(
+          { _id: counselorClientId },
+          {
+            $setOnInsert: {
+              _id: counselorClientId,
+              sourceStudentId: String(student._id),
+              counselorId: String(counselorId),
+              name: studentName,
+              yearCourse: studentCourse,
+              email: student.email || '',
+              avatarInitials: initials,
+              status: 'New',
+            },
+          },
+          { upsert: true, new: true }
+        );
+        if (counselorClient.status === 'Archived') {
+          await CounselorStudent.updateOne(
+            { _id: counselorClientId, counselorId: String(counselorId) },
+            { $set: { status: 'New' } }
+          );
+        }
+      }
+
       const mirrorId = `stu-appt-${appointment._id}`;
 
       await CounselorAppointment.findOneAndUpdate(
@@ -50,7 +80,9 @@ exports.createAppointment = async (req, res) => {
         {
           $setOnInsert: {
             _id:               mirrorId,
-            studentId:         String(req.user.id),
+            studentId:         counselorId && student
+              ? `client-${String(counselorId)}-${String(student._id)}`
+              : String(req.user.id),
             counselorId:       counselorId ? String(counselorId) : '',
             counselorName:     counselorName || '',
             studentName,

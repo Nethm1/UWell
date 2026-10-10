@@ -8,9 +8,12 @@ import {
   TouchableOpacity,
   StatusBar,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
 import { counselorService } from '../../services/counselorService';
@@ -21,6 +24,9 @@ const StudentChatScreen = ({ route, navigation }) => {
 
   const [chatData, setChatData] = useState(null);
   const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
   const flatListRef = useRef(null);
 
   useEffect(() => {
@@ -28,21 +34,38 @@ const StudentChatScreen = ({ route, navigation }) => {
   }, [studentId]);
 
   const loadChat = async () => {
-    const data = await counselorService.getMessageByStudentId(studentId);
-    setChatData(data);
+    try {
+      setError('');
+      const data = await counselorService.getMessageByStudentId(studentId);
+      setChatData(data);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Could not load this conversation.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSend = async () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || sending || !chatData) return;
     const textToSend = inputText.trim();
-    setInputText('');
+    setSending(true);
+    try {
+      await counselorService.sendMessage(studentId, textToSend);
+      setInputText('');
+      await loadChat();
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (requestError) {
+      const message = requestError.response?.data?.message || 'Message could not be sent. Please retry.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(message);
+      else Alert.alert('Message not sent', message);
+    } finally {
+      setSending(false);
+    }
+  };
 
-    await counselorService.sendMessage(studentId, textToSend);
-    await loadChat();
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+  const displayTime = (value) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   };
 
   const renderBubble = ({ item }) => {
@@ -74,7 +97,7 @@ const StudentChatScreen = ({ route, navigation }) => {
               isCounselor ? styles.counselorTimeText : styles.studentTimeText
             ]}
           >
-            {item.timestamp}
+            {displayTime(item.timestamp)}
           </Text>
         </View>
       </View>
@@ -97,8 +120,8 @@ const StudentChatScreen = ({ route, navigation }) => {
         <View style={styles.headerTitleCol}>
           <Text style={styles.studentNameText}>{studentName}</Text>
           <View style={styles.statusOnlineRow}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.onlineText}>Online/Active Now</Text>
+            <Ionicons name="lock-closed" size={10} color="#3973B9" style={{ marginRight: 4 }} />
+            <Text style={styles.onlineText}>Private chat · booked student</Text>
           </View>
         </View>
 
@@ -112,15 +135,26 @@ const StudentChatScreen = ({ route, navigation }) => {
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <FlatList
-          ref={flatListRef}
-          data={chatData?.chatHistory || []}
-          keyExtractor={(item, index) => item.id || index.toString()}
-          renderItem={renderBubble}
-          contentContainerStyle={styles.chatContent}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        />
+        {error ? (
+          <View style={styles.emptyConversation}>
+            <Text style={styles.emptyTitle}>Conversation unavailable</Text>
+            <Text style={styles.emptyDescription}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={loadChat}><Text style={styles.retryText}>Try again</Text></TouchableOpacity>
+          </View>
+        ) : loading ? (
+          <View style={styles.emptyConversation}><ActivityIndicator color={colors.primary} /><Text style={styles.emptyDescription}>Opening private chat…</Text></View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={chatData?.chatHistory || []}
+            keyExtractor={(item, index) => item.id || index.toString()}
+            renderItem={renderBubble}
+            contentContainerStyle={styles.chatContent}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            ListEmptyComponent={<View style={styles.chatEmpty}><Text style={styles.chatEmptyText}>This is a private conversation with {studentName}. Say hello when you’re ready.</Text></View>}
+          />
+        )}
 
         {/* Input Bar */}
         <View style={styles.inputContainer}>
@@ -129,22 +163,23 @@ const StudentChatScreen = ({ route, navigation }) => {
           </TouchableOpacity>
           <TextInput
             style={styles.textInput}
-            placeholder="Type a response..."
+            placeholder={chatData ? 'Write a supportive reply…' : 'Open a booked student chat to reply'}
             placeholderTextColor={colors.textSecondary}
             value={inputText}
             onChangeText={setInputText}
             onSubmitEditing={handleSend}
+            editable={!loading && !error && !!chatData && !sending}
           />
           <TouchableOpacity
             style={[
               styles.sendBtn,
-              !inputText.trim() && styles.sendBtnDisabled
+              (!inputText.trim() || sending || !chatData || !!error) && styles.sendBtnDisabled
             ]}
             onPress={handleSend}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || sending || !chatData || !!error}
             accessibilityLabel="Send message"
           >
-            <Text style={styles.sendBtnText}>Send</Text>
+            {sending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.sendBtnText}>Send</Text>}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -160,6 +195,13 @@ const styles = StyleSheet.create({
   keyboardContainer: {
     flex: 1
   },
+  emptyConversation: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  emptyTitle: { color: colors.darkText, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  emptyDescription: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 7 },
+  retryButton: { backgroundColor: colors.primary, paddingHorizontal: 15, paddingVertical: 9, borderRadius: 10, marginTop: 12 },
+  retryText: { color: colors.white, fontSize: 12, fontWeight: '700' },
+  chatEmpty: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.xl },
+  chatEmptyText: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   topHeader: {
     flexDirection: 'row',
     alignItems: 'center',

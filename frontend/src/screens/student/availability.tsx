@@ -30,6 +30,9 @@ const sortSlots = (slots: string[]) =>
 const formatDateLabel = (d: Date) =>
   `${WEEKDAY_SHORT[d.getDay()]}, ${MONTH_SHORT[d.getMonth()]} ${d.getDate()}`;
 
+const dateKey = (d: Date) =>
+  d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+
 export default function AvailabilityScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute();
@@ -83,8 +86,18 @@ export default function AvailabilityScreen() {
   const activeDays = useMemo(() => {
     const map: Record<string, string[]> = {};
     availability.forEach((item) => {
-      if (item?.active && Array.isArray(item?.slots) && item.slots.length > 0) {
+      if (!item?.date && item?.active && Array.isArray(item?.slots) && item.slots.length > 0) {
         map[item.day] = sortSlots([...new Set(item.slots as string[])]);
+      }
+    });
+    return map;
+  }, [availability]);
+
+  const datedSlots = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    availability.forEach((item) => {
+      if (item?.date && item?.active && Array.isArray(item?.slots) && item.slots.length > 0) {
+        map[item.date] = sortSlots([...new Set(item.slots as string[])]);
       }
     });
     return map;
@@ -97,10 +110,10 @@ export default function AvailabilityScreen() {
     for (let i = 0; i < 21 && days.length < 5; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
-      if (activeDays[WEEKDAY_NAMES[d.getDay()]]) days.push(d);
+      if (activeDays[WEEKDAY_NAMES[d.getDay()]] || datedSlots[dateKey(d)]) days.push(d);
     }
     return days;
-  }, [activeDays]);
+  }, [activeDays, datedSlots]);
 
   useEffect(() => {
     if (upcomingDays.length > 0 && !selectedDate) {
@@ -109,7 +122,9 @@ export default function AvailabilityScreen() {
   }, [upcomingDays, selectedDate]);
 
   const selectedDayName = selectedDate ? WEEKDAY_NAMES[selectedDate.getDay()] : '';
-  const slots = selectedDate && activeDays[selectedDayName] ? activeDays[selectedDayName] : [];
+  const slots = selectedDate
+    ? sortSlots([...new Set([...(activeDays[selectedDayName] || []), ...(datedSlots[dateKey(selectedDate)] || [])])])
+    : [];
   const hasAvailability = !!selectedDate && slots.length > 0;
 
   const handleContinue = () => {
