@@ -1,0 +1,24 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Connect booking approval to student notifications with socket events",
+  "status": "pending",
+  "steps": [
+    "Modify backend/src/controllers/counselor/appointmentController.js updateAppointmentStatus function to emit socket event 'appointment-approved' to student when status changes to 'Confirmed'",
+    "Add sendStudentNotification call in updateAppointmentStatus when status becomes 'Confirmed'",
+    "Add socket event handler in frontend/src/screens/student/home.tsx for 'appointment-approved' event to show toast/alert",
+    "Add socket event handler in frontend/src/screens/student/my-appointments.tsx to refresh appointment list when 'appointment-approved' is received"
+  ],
+  "acceptance_criteria": [
+    "When counselor approves a pending appointment, student receives real-time notification",
+    "Student's My Appointments screen updates to show 'Confirmed' status",
+    "Student sees visual indicator (toast or modal) for the new appointment status"
+  ],
+  "verification": [
+    "Start backend and frontend, login as counselor and approve a pending appointment",
+    "Switch to student account and verify notification appears in Home screen",
+    "Verify My Appointments screen shows 'Confirmed' status for the approved appointment"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
