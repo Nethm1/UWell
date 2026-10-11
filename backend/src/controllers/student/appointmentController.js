@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Appointment = require('../../models/student/Appointment');
 const Student = require('../../models/student/Student');
 const CounselorAppointment = require('../../models/counselor/CounselorAppointment');
@@ -34,89 +35,117 @@ exports.createAppointment = async (req, res) => {
     // Mirror to counselor_appointments so counselor can see this booking.
     // Uses upsert on the stable key so retries never create duplicates.
     try {
-      const student = await Student.findById(req.user.id).lean();
+      let student = null;
+      if (req.user && req.user.id) {
+        try {
+          if (mongoose.Types.ObjectId.isValid(req.user.id)) {
+            student = await Student.findById(req.user.id).lean();
+          } else {
+            student = await Student.findOne({
+              $or: [{ studentId: String(req.user.id) }, { email: String(req.user.id) }],
+            }).lean();
+          }
+        } catch (lookupErr) {
+          console.warn('[Booking] Could not load student document:', lookupErr.message);
+        }
+      }
+
       const studentName = student
-        ? `${student.firstName} ${student.lastName}`
-        : 'Student';
+        ? `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student'
+        : (req.user?.name || 'Student');
       const studentCourse = student
-        ? `${student.yearOfStudy} · ${student.degreeProgram}`
+        ? `${student.yearOfStudy || ''} · ${student.degreeProgram || ''}`.trim()
         : '';
       const initials = student
-        ? `${(student.firstName || '')[0]}${(student.lastName || '')[0]}`.toUpperCase()
+        ? `${(student.firstName || 'S')[0]}${(student.lastName || 'T')[0]}`.toUpperCase()
         : 'ST';
 
-      // Keep a counselor-specific client record so counselors can find and
-      // message students who booked them. A composite key permits a student
-      // to work with more than one counselor without sharing private notes.
-      if (counselorId && student) {
-        const counselorClientId = `client-${String(counselorId)}-${String(student._id)}`;
-        const counselorClient = await CounselorStudent.findOneAndUpdate(
+      // Resolve a reliable counselorId
+      let targetCounselorId = counselorId ? String(counselorId).trim() : '';
+      if (!targetCounselorId && counselorName) {
+        try {
+          const parts = counselorName.split(' ').filter(Boolean);
+          const matched = await Counselor.findOne({
+            $or: [
+              { name: counselorName },
+              { firstName: new RegExp(parts[0] || '', 'i') },
+              { lastName: new RegExp(parts[parts.length - 1] || '', 'i') },
+            ],
+          }).select('_id staffId').lean();
+          if (matched) {
+            targetCounselorId = String(matched._id);
+          }
+        } catch {}
+      }
+      if (!targetCounselorId) {
+        targetCounselorId = 'c1'; // Default seeded counselor so screen is never blank
+      }
+
+      // Keep counselor-specific client record
+      const studentRefId = student?._id ? String(student._id) : String(req.user?.id || 'student');
+      const counselorClientId = `client-${targetCounselorId}-${studentRefId}`;
+
+      try {
+        await CounselorStudent.findOneAndUpdate(
           { _id: counselorClientId },
           {
-            $setOnInsert: {
-              _id: counselorClientId,
-              sourceStudentId: String(student._id),
-              counselorId: String(counselorId),
+            $set: {
+              sourceStudentId: studentRefId,
+              counselorId: targetCounselorId,
               name: studentName,
               yearCourse: studentCourse,
-              email: student.email || '',
+              email: student?.email || req.user?.email || '',
               avatarInitials: initials,
               status: 'New',
             },
           },
-          { upsert: true, new: true }
+          { upsert: true, new: true, setDefaultsOnInsert: true }
         );
-        if (counselorClient.status === 'Archived') {
-          await CounselorStudent.updateOne(
-            { _id: counselorClientId, counselorId: String(counselorId) },
-            { $set: { status: 'New' } }
-          );
-        }
+      } catch (csErr) {
+        console.warn('[Booking] CounselorStudent upsert warning:', csErr.message);
       }
 
       const mirrorId = `stu-appt-${appointment._id}`;
 
       // Look up counselor's actual office location for In Person appointments
       let officeLocation = 'Online Session';
-      if (sessionType === 'In Person' && counselorId) {
-        try {
-          const counselorDoc = await Counselor.findById(counselorId).select('officeLocation').lean();
-          officeLocation = counselorDoc?.officeLocation || 'In-Person Session';
-        } catch {
-          officeLocation = 'In-Person Session';
+      if (sessionType === 'In Person') {
+        officeLocation = 'In-Person Session';
+        if (targetCounselorId && mongoose.Types.ObjectId.isValid(targetCounselorId)) {
+          try {
+            const counselorDoc = await Counselor.findById(targetCounselorId).select('officeLocation').lean();
+            if (counselorDoc?.officeLocation) {
+              officeLocation = counselorDoc.officeLocation;
+            }
+          } catch {}
         }
       }
 
       await CounselorAppointment.findOneAndUpdate(
         { _id: mirrorId },
         {
-          $setOnInsert: {
-            _id:               mirrorId,
-            studentId:         counselorId && student
-              ? `client-${String(counselorId)}-${String(student._id)}`
-              : String(req.user.id),
-            counselorId:       counselorId ? String(counselorId) : '',
-            counselorName:     counselorName || '',
+          $set: {
+            _id: mirrorId,
+            studentId: counselorClientId,
+            counselorId: targetCounselorId,
+            counselorName: counselorName || '',
             studentName,
             studentCourse,
-            sessionType:       sessionType || 'Online',
+            sessionType: sessionType || 'Online',
             date,
             time,
-            location:          officeLocation,
-            status:            'Pending',
-            notes:             notes || '',
-            avatarInitials:    initials,
+            location: officeLocation,
+            status: 'Pending',
+            notes: notes || '',
+            avatarInitials: initials,
           },
         },
-        { upsert: true, new: false }
+        { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      console.log(`[Booking] Mirror created for appointment ${appointment._id}`);
+      console.log(`[Booking] Mirror created in counselor_appointments for appointment ${appointment._id} (counselor: ${targetCounselorId})`);
     } catch (mirrorErr) {
-      // Non-blocking — student appointment already saved successfully.
-      // Log the error type only; no student data in the log.
-      const errCode = mirrorErr?.code || mirrorErr?.name || 'UNKNOWN';
-      console.error(`[Booking] Counselor mirror failed (${errCode}) for appointment ${appointment._id}. Student booking is intact.`);
+      console.error(`[Booking] Counselor mirror failed:`, mirrorErr);
     }
 
     res.status(201).json({
@@ -195,8 +224,22 @@ exports.updateAppointment = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    if (!appointment) {
-      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    // Sync status or date/time changes with CounselorAppointment mirror
+    try {
+      const mirrorId = `stu-appt-${appointment._id}`;
+      const counselorUpdates = {};
+      if (date) counselorUpdates.date = date;
+      if (time) counselorUpdates.time = time;
+      if (sessionType) counselorUpdates.sessionType = sessionType;
+      if (notes !== undefined) counselorUpdates.notes = notes;
+      if (status) {
+        counselorUpdates.status = status === 'upcoming' ? 'Pending' : (status === 'cancelled' ? 'Cancelled' : 'Confirmed');
+      }
+      if (Object.keys(counselorUpdates).length > 0) {
+        await CounselorAppointment.updateOne({ _id: mirrorId }, { $set: counselorUpdates });
+      }
+    } catch (syncErr) {
+      console.warn('[Booking] CounselorAppointment update sync warning:', syncErr.message);
     }
 
     res.status(200).json({
@@ -227,6 +270,16 @@ exports.cancelAppointment = async (req, res) => {
         success: false,
         message: 'Appointment not found or already cancelled',
       });
+    }
+
+    // Sync cancellation with CounselorAppointment mirror
+    try {
+      await CounselorAppointment.updateOne(
+        { _id: `stu-appt-${appointment._id}` },
+        { $set: { status: 'Cancelled' } }
+      );
+    } catch (syncErr) {
+      console.warn('[Booking] CounselorAppointment cancel sync warning:', syncErr.message);
     }
 
     res.status(200).json({

@@ -3,6 +3,8 @@ import {
   Animated,
   Easing,
   Image,
+  Modal,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Switch,
@@ -10,10 +12,12 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { counselorService } from '../../services/counselorService';
+import { notificationService } from '../../services/notificationService';
 import { useAuth } from '../../context/AuthContext';
 import { connectSocket } from '../../services/socketService';
 
@@ -260,7 +264,33 @@ const DashboardScreen = ({ navigation }) => {
       const data = studentsResult.value;
       setStudents(Array.isArray(data) ? data : data?.students || []);
     }
+
+    try {
+      const notifRes = await notificationService.getNotifications();
+      if (notifRes?.notifications) {
+        setNotifications(notifRes.notifications);
+      }
+    } catch (nErr) {
+      console.warn('[Counselor] Notification fetch warning:', nErr.message);
+    }
   }, []);
+
+  useEffect(() => {
+    const unsubNotif = notificationService.onNotificationReceived((newNotif) => {
+      setNotifications((prev) => [newNotif, ...prev.filter((n) => (n._id || n.id) !== (newNotif._id || newNotif.id))]);
+      if (newNotif?.title && newNotif?.message) {
+        Alert.alert(newNotif.title, newNotif.message);
+      }
+    });
+    const unsubApt = notificationService.onAppointmentChange(
+      () => loadDashboardData(),
+      () => loadDashboardData()
+    );
+    return () => {
+      if (unsubNotif) unsubNotif();
+      if (unsubApt) unsubApt();
+    };
+  }, [loadDashboardData]);
 
   useEffect(() => {
     loadDashboardData();
@@ -310,6 +340,27 @@ const DashboardScreen = ({ navigation }) => {
     params: { studentId: item.studentId, appointment: item },
   });
 
+  const unreadCount = notifications.filter((n) => n.unread || !n.isRead).length;
+
+  const handleMarkNotifRead = async (id) => {
+    setNotifications((prev) =>
+      prev.map((n) => ((n._id || n.id) === id ? { ...n, unread: false, isRead: true } : n))
+    );
+    await notificationService.markAsRead(id);
+  };
+
+  const handleMarkAllNotifsRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false, isRead: true })));
+    await notificationService.markAllAsRead();
+  };
+
+  const handleNotificationClick = async (item) => {
+    const id = item._id || item.id;
+    await handleMarkNotifRead(id);
+    setNotifModalVisible(false);
+    navigation.navigate('Appointments');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={C.page} />
@@ -331,13 +382,17 @@ const DashboardScreen = ({ navigation }) => {
           <View style={[styles.topActions, compact && styles.topActionsCompact]}>
             <TouchableOpacity
               style={[styles.bellButton, compact && styles.bellButtonCompact]}
-              onPress={() => navigation.navigate('Messages')}
+              onPress={() => setNotifModalVisible(true)}
               accessibilityRole="button"
-              accessibilityLabel="Open messages"
+              accessibilityLabel="Open notifications"
               activeOpacity={0.72}
             >
               <Feather name="bell" size={22} color={C.coral} />
-              <View style={styles.notificationCount}><Text style={styles.notificationCountText}>3</Text></View>
+              {unreadCount > 0 && (
+                <View style={styles.notificationCount}>
+                  <Text style={styles.notificationCountText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')} accessibilityRole="button" accessibilityLabel="Open profile" activeOpacity={0.72}>
               <Avatar initials={initials} size={compact ? 50 : 58} imageUri={profile?.profileImage} />
@@ -478,6 +533,104 @@ const DashboardScreen = ({ navigation }) => {
         )}
         <View style={styles.bottomSpace} />
       </Animated.ScrollView>
+
+      {/* ── Notification Modal ────────────────────────────────────────────── */}
+      <Modal
+        visible={notifModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setNotifModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.notifSheet}>
+            <View style={styles.notifHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Feather name="bell" size={20} color={C.coral} />
+                <Text style={styles.notifTitle}>Notifications</Text>
+                {unreadCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{unreadCount} new</Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                {unreadCount > 0 && (
+                  <TouchableOpacity onPress={handleMarkAllNotifsRead}>
+                    <Text style={styles.markAllReadText}>Mark read</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={() => setNotifModalVisible(false)}
+                  style={styles.closeBtn}
+                >
+                  <Ionicons name="close" size={22} color={C.ink} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView
+              style={{ maxHeight: 420 }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingVertical: 10 }}
+            >
+              {notifications.length === 0 ? (
+                <View style={styles.notifEmpty}>
+                  <Feather name="check-circle" size={36} color={C.green} />
+                  <Text style={styles.notifEmptyTitle}>All caught up!</Text>
+                  <Text style={styles.notifEmptySub}>No new notifications from the welfare team or students.</Text>
+                </View>
+              ) : (
+                notifications.map((item) => {
+                  const id = item._id || item.id;
+                  const isUnread = item.unread || !item.isRead;
+                  const isRescheduled = item.type === 'appointment_rescheduled';
+                  const isCancelled = item.type === 'appointment_cancelled' || item.type === 'appointment_deleted';
+
+                  return (
+                    <TouchableOpacity
+                      key={id}
+                      style={[styles.notifItem, isUnread && styles.notifItemUnread]}
+                      onPress={() => handleNotificationClick(item)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[
+                        styles.notifIconWrap,
+                        isRescheduled && { backgroundColor: '#FFF3D6' },
+                        isCancelled && { backgroundColor: '#FDEAE8' },
+                      ]}>
+                        <Ionicons
+                          name={isRescheduled ? 'calendar-outline' : (isCancelled ? 'alert-circle-outline' : 'notifications-outline')}
+                          size={18}
+                          color={isRescheduled ? '#B96700' : (isCancelled ? C.coralDark : C.coral)}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                          <Text style={[styles.notifItemTitle, isUnread && styles.notifItemTitleBold]}>
+                            {item.title}
+                          </Text>
+                          {isUnread && <View style={styles.unreadDot} />}
+                        </View>
+                        <Text style={styles.notifItemMsg}>{item.message}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                          <Text style={styles.notifItemTime}>
+                            {item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently'}
+                          </Text>
+                          {item.appointmentId && (
+                            <View style={styles.sessionChip}>
+                              <Text style={styles.sessionChipText}>View in Schedule ›</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -593,6 +746,27 @@ const styles = StyleSheet.create({
   secureText: { color: C.green, fontSize: 10, fontWeight: '700' },
   securePillCompact: { paddingHorizontal: 7, paddingVertical: 7 },
   bottomSpace: { height: 12 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  notifSheet: { backgroundColor: C.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 },
+  notifHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F0ECE8' },
+  notifTitle: { fontSize: 18, fontWeight: '800', color: C.ink },
+  notifBadge: { backgroundColor: C.peach, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  notifBadgeText: { fontSize: 11, fontWeight: '700', color: C.coralDark },
+  markAllReadText: { fontSize: 12, fontWeight: '700', color: C.coral },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F5EFEA', alignItems: 'center', justifyContent: 'center' },
+  notifEmpty: { alignItems: 'center', paddingVertical: 40, gap: 8 },
+  notifEmptyTitle: { fontSize: 16, fontWeight: '700', color: C.ink },
+  notifEmptySub: { fontSize: 12, color: C.muted, textAlign: 'center', maxWidth: 240 },
+  notifItem: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 16, marginBottom: 8, backgroundColor: '#FAF7F5' },
+  notifItemUnread: { backgroundColor: '#FFF5F2', borderWidth: 1, borderColor: '#FCDCD5' },
+  notifIconWrap: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.peach, alignItems: 'center', justifyContent: 'center' },
+  notifItemTitle: { fontSize: 13, fontWeight: '600', color: C.ink },
+  notifItemTitleBold: { fontWeight: '800', color: C.coralDark },
+  notifItemMsg: { fontSize: 12, color: '#555259', lineHeight: 17, marginTop: 2 },
+  notifItemTime: { fontSize: 10, color: C.muted, marginTop: 4 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.coral },
+  sessionChip: { backgroundColor: C.peach, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  sessionChipText: { fontSize: 10.5, fontWeight: '700', color: C.coralDark },
 });
 
 export default DashboardScreen;

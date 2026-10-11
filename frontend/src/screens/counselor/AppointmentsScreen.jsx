@@ -19,6 +19,7 @@ import { colors, spacing } from '../../theme';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
 import JoinVideoCallButton from '../../components/common/JoinVideoCallButton';
 import { counselorService } from '../../services/counselorService';
+import { notificationService } from '../../services/notificationService';
 
 const FILTERS = ['Today', 'Upcoming', 'Past'];
 
@@ -61,7 +62,15 @@ const AppointmentsScreen = ({ navigation }) => {
 
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [fade]);
+
+    const unsub = notificationService.onAppointmentChange(
+      () => loadAppointments(),
+      () => loadAppointments()
+    );
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [fade, loadAppointments]);
 
   const updateStatus = async (appointment, nextStatus) => {
     const id = appointment.id || appointment._id;

@@ -20,6 +20,15 @@ function showError(message) {
   Alert.alert('Unable to join video call', message);
 }
 
+/**
+ * @param {{
+ *   appointmentId?: any;
+ *   status?: any;
+ *   sessionType?: any;
+ *   style?: any;
+ *   textStyle?: any;
+ * }} props
+ */
 export default function JoinVideoCallButton({
   appointmentId,
   status,

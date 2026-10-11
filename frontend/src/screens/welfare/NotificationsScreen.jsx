@@ -18,7 +18,10 @@ const typeStyles = {
   completed: { icon: 'checkmark-circle-outline', bg: '#DDF3E4', tint: '#397052' },
   schedule: { icon: 'time-outline', bg: '#FFF0D6', tint: '#9A6818' },
   system: { icon: 'chatbubble-ellipses-outline', bg: '#E5EEFA', tint: '#4A90E2' },
-  reminder: { icon: 'person-circle-outline', bg: '#F3E8FA', tint: '#7E57C2' }
+  reminder: { icon: 'person-circle-outline', bg: '#F3E8FA', tint: '#7E57C2' },
+  emergency_sos: { icon: 'warning', bg: '#FDEAE8', tint: '#C0392B' },
+  student_message: { icon: 'chatbubble-ellipses', bg: '#EBF5FB', tint: '#2980B9' },
+  welfare_message: { icon: 'chatbubble-ellipses', bg: '#EBF5FB', tint: '#2980B9' },
 };
 
 const FILTERS = ['All', 'Unread', 'Read'];
@@ -43,9 +46,60 @@ const NotificationsScreen = ({ navigation }) => {
     setTimeout(() => setRefreshing(false), 500);
   };
 
-  // ---------- UPDATE: mark one read ----------
-  const handleMarkRead = (item) => {
-    if (item.unread) markNotificationRead(item.id);
+  // ---------- HANDLE NOTIFICATION CLICK ----------
+  const handleNotificationClick = (item) => {
+    if (item.unread) {
+      markNotificationRead(item.id || item._id);
+    }
+
+    const isEmergency =
+      item.type === 'emergency_sos' ||
+      Boolean(item.metadata?.isEmergency) ||
+      (typeof item.title === 'string' && /emergency/i.test(item.title));
+
+    const isStudentChat =
+      item.type === 'student_message' ||
+      item.type === 'emergency_sos' ||
+      item.type === 'welfare_message' ||
+      Boolean(item.metadata?.studentId || item.metadata?.conversationId) ||
+      (typeof item.title === 'string' && /message from|emergency/i.test(item.title));
+
+    if (isStudentChat) {
+      const studentId =
+        item.metadata?.studentId ||
+        item.studentId ||
+        (item.appointmentId && !String(item.type).startsWith('appointment_') ? String(item.appointmentId) : '');
+      const conversationId =
+        item.metadata?.conversationId ||
+        (item.appointmentId && !String(item.type).startsWith('appointment_') ? String(item.appointmentId) : '');
+      const studentName =
+        item.metadata?.studentName ||
+        (item.title ? item.title.replace(/^🚨\s*EMERGENCY SOS ALERT:?\s*/i, '').replace(/^Message from\s*/i, '').trim() : '') ||
+        'Student';
+      const studentRegNo = item.metadata?.studentRegNo || '';
+      const studentPhone = item.metadata?.studentPhone || '';
+      const studentFaculty = item.metadata?.studentFaculty || '';
+
+      navigation.navigate('StudentChat', {
+        studentId,
+        conversationId,
+        studentName,
+        studentRegNo,
+        studentPhone,
+        studentFaculty,
+      });
+      return;
+    }
+
+    // Appointment notifications
+    if (item.appointmentId || (typeof item.type === 'string' && item.type.startsWith('appointment_'))) {
+      const aptId = item.appointmentId || item.metadata?.appointmentId;
+      if (aptId) {
+        navigation.navigate('AppointmentDetails', {
+          appointmentId: aptId,
+        });
+      }
+    }
   };
 
   // ---------- UPDATE: mark all read ----------
@@ -137,12 +191,27 @@ const NotificationsScreen = ({ navigation }) => {
         ) : (
           filtered.map((n) => {
             const t = typeStyles[n.type] || typeStyles.system;
+            const isEmergency =
+              n.type === 'emergency_sos' ||
+              Boolean(n.metadata?.isEmergency) ||
+              (typeof n.title === 'string' && /emergency/i.test(n.title));
+            const isStudentChat =
+              n.type === 'student_message' ||
+              n.type === 'emergency_sos' ||
+              n.type === 'welfare_message' ||
+              Boolean(n.metadata?.studentId || n.metadata?.conversationId) ||
+              (typeof n.title === 'string' && /message from|emergency/i.test(n.title));
+
             return (
               <TouchableOpacity
-                key={n.id}
-                style={[styles.card, n.unread && styles.cardUnread]}
+                key={n.id || n._id}
+                style={[
+                  styles.card,
+                  n.unread && styles.cardUnread,
+                  isEmergency && { borderColor: '#F5B7B1', backgroundColor: '#FDEDEC' },
+                ]}
                 activeOpacity={0.85}
-                onPress={() => handleMarkRead(n)}
+                onPress={() => handleNotificationClick(n)}
               >
                 <View style={[styles.iconWrap, { backgroundColor: t.bg }]}>
                   <Ionicons name={t.icon} size={20} color={t.tint} />
@@ -150,13 +219,37 @@ const NotificationsScreen = ({ navigation }) => {
 
                 <View style={{ flex: 1 }}>
                   <View style={styles.titleRow}>
-                    <Text style={styles.title} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.title,
+                        isEmergency && { color: '#C0392B' },
+                      ]}
+                      numberOfLines={1}
+                    >
                       {n.title}
                     </Text>
                     {n.unread && <View style={styles.unreadDot} />}
                   </View>
                   <Text style={styles.message}>{n.message}</Text>
-                  <Text style={styles.time}>{n.timestamp}</Text>
+                  <Text style={styles.time}>{n.timestamp || (n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')}</Text>
+
+                  {isStudentChat && (
+                    <View style={styles.chatActionRow}>
+                      <Ionicons
+                        name={isEmergency ? 'warning-outline' : 'chatbubble-ellipses-outline'}
+                        size={14}
+                        color={isEmergency ? '#C0392B' : colors.primary}
+                      />
+                      <Text style={[styles.chatActionText, isEmergency && { color: '#C0392B' }]}>
+                        {isEmergency ? '🚨 Tap to view Emergency SOS chat' : '💬 Tap to open student chat & reply'}
+                      </Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={13}
+                        color={isEmergency ? '#C0392B' : colors.primary}
+                      />
+                    </View>
+                  )}
                 </View>
 
                 {/* DELETE button */}
@@ -309,7 +402,21 @@ const styles = StyleSheet.create({
   deleteBtn: {
     padding: spacing.xs,
     marginLeft: spacing.sm
-  }
+  },
+  chatActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#F5ECE7',
+  },
+  chatActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
 });
 
 export default NotificationsScreen;

@@ -1,7 +1,11 @@
+const path = require('path');
+const fs = require('fs');
 const Welfare = require('../../models/welfare/Welfare');
 const Counselor = require('../../models/counselor/Counselor');
 const Appointment = require('../../models/counselor/Appointment');
 const Notification = require('../../models/Notification');
+const CounselorAppointment = require('../../models/counselor/CounselorAppointment');
+const { sendNotification, broadcastAppointmentChange } = require('../../utils/notificationHelper');
 
 // ── Get Logged-In Welfare Officer Profile ─────────────────────────────────────
 exports.getProfile = async (req, res) => {
@@ -122,6 +126,7 @@ exports.updateProfile = async (req, res) => {
     if (consultationMode !== undefined) welfare.consultationMode = consultationMode.trim();
     if (emergencyAvailable !== undefined) welfare.emergencyAvailable = Boolean(emergencyAvailable);
     if (availabilityNote !== undefined) welfare.availabilityNote = availabilityNote.trim();
+    if (req.body.profilePicture !== undefined) welfare.profilePicture = req.body.profilePicture;
 
     await welfare.save();
 
@@ -173,7 +178,7 @@ exports.getDashboard = async (req, res) => {
         .populate('student', 'firstName lastName studentId')
         .populate('counselor', 'firstName lastName specialization')
         .sort({ createdAt: -1 })
-        .limit(10),
+        .limit(30),
     ]);
 
     // Format today's service activity
@@ -299,21 +304,23 @@ exports.updateSchedule = async (req, res) => {
 // ── Get Counseling Services Overview (Counselors + Live Sessions) ────────────
 exports.getCounselingServices = async (req, res) => {
   try {
-    // 1. Fetch approved Counselors
-    const counselorsDoc = await Counselor.find({ isApproved: true }).sort({ firstName: 1 });
+    // 1. Fetch approved Counselors from database
+    const counselorsDoc = await Counselor.find({
+      $or: [{ isApproved: true }, { approvalStatus: 'approved' }],
+    }).sort({ firstName: 1 });
     const counselors = counselorsDoc.map((c) => ({
       id: c._id.toString(),
       _id: c._id.toString(),
       staffId: c.staffId,
-      name: `${c.firstName} ${c.lastName}`.trim(),
+      name: c.name || `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Counselor',
       firstName: c.firstName,
       lastName: c.lastName,
-      specialization: c.specialization,
-      qualification: c.qualification,
-      yearsOfExperience: c.yearsOfExperience,
+      specialization: c.specialization || 'Clinical Counseling',
+      qualification: c.qualification || '',
+      yearsOfExperience: c.yearsOfExperience || '',
       officeLocation: c.officeLocation || 'Main Welfare Centre',
-      phone: c.phone,
-      email: c.email,
+      phone: c.phone || '',
+      email: c.email || '',
       status: c.status || 'Available',
     }));
 
@@ -411,14 +418,6 @@ exports.updateCounselorStatus = async (req, res) => {
   }
 };
 
-// ── Helper: Dispatch Notification ────────────────────────────────────────────
-const sendNotification = async (recipientId, recipientType, title, message, type, appointmentId = null) => {
-  try {
-    await Notification.create({ recipientId, recipientType, title, message, type, appointmentId });
-  } catch (err) {
-    console.error('❌ sendNotification error:', err.message);
-  }
-};
 
 // ── Get All Appointments (for Welfare Officer Dashboard) ─────────────────────
 exports.getWelfareAppointments = async (req, res) => {
@@ -542,7 +541,39 @@ exports.updateWelfareAppointment = async (req, res) => {
 
     await appointment.save();
 
-    // ── Send notifications to Student & Counselor ──────────────────────────
+    // ── 1. Synchronize Mirror in counselor_appointments ─────────────────────
+    try {
+      const mirrorId = `stu-appt-${appointment._id}`;
+      const counselorStatusMap = {
+        upcoming: 'Pending',
+        pending: 'Pending',
+        confirmed: 'Confirmed',
+        completed: 'Completed',
+        cancelled: 'Cancelled',
+      };
+
+      const mirrorUpdates = {};
+      if (date !== undefined) mirrorUpdates.date = appointment.date;
+      if (time !== undefined) mirrorUpdates.time = appointment.time;
+      if (sessionType !== undefined) mirrorUpdates.sessionType = appointment.sessionType;
+      if (status !== undefined) {
+        const norm = (appointment.status || '').toLowerCase();
+        mirrorUpdates.status = counselorStatusMap[norm] || appointment.status;
+      }
+      if (notes !== undefined || officerNotes !== undefined) {
+        mirrorUpdates.notes = appointment.notes;
+      }
+
+      await CounselorAppointment.updateOne(
+        { _id: mirrorId },
+        { $set: mirrorUpdates }
+      );
+      console.log(`[Welfare] Synced mirror ${mirrorId} in counselor_appointments:`, mirrorUpdates);
+    } catch (mirrorErr) {
+      console.error('❌ Error updating counselor_appointments mirror:', mirrorErr.message);
+    }
+
+    // ── 2. Send notifications to Student & Counselor ──────────────────────────
     const isRescheduled = (date && date !== prevDate) || (time && time !== prevTime);
     const isStatusChanged = status && status !== prevStatus;
     const studentName = appointment.studentName || (appointment.student ? `${appointment.student.firstName} ${appointment.student.lastName}` : 'Student');
@@ -550,33 +581,87 @@ exports.updateWelfareAppointment = async (req, res) => {
 
     let notifTitle = 'Appointment Updated';
     let notifType = 'appointment_updated';
-    let studentMsg = `Your appointment with ${counselorName} has been updated.`;
-    let counselorMsg = `Your appointment with ${studentName} has been updated.`;
+    let studentMsg = `Your appointment with ${counselorName} has been updated by the Welfare Officer.`;
+    let counselorMsg = `The Welfare Officer updated details for your appointment with ${studentName} on ${appointment.date} at ${appointment.time}.`;
+    if (officerNotes) {
+      counselorMsg += ` Note: "${officerNotes}"`;
+    }
 
     if (isRescheduled) {
       notifTitle = 'Appointment Rescheduled';
       notifType = 'appointment_rescheduled';
       const newDateStr = `${appointment.date} at ${appointment.time}`;
-      studentMsg = `Your appointment with ${counselorName} has been rescheduled to ${newDateStr}.`;
-      counselorMsg = `Your appointment with ${studentName} has been rescheduled to ${newDateStr}.`;
+      studentMsg = `Your appointment with ${counselorName} has been rescheduled to ${newDateStr} (${appointment.sessionType || 'Online'}) by the Welfare Officer.`;
+      counselorMsg = `The Welfare Officer has rescheduled your appointment with ${studentName} to ${newDateStr} (${appointment.sessionType || 'Online'}).`;
+      if (officerNotes) {
+        counselorMsg += ` Note: "${officerNotes}"`;
+      }
     } else if (isStatusChanged) {
       if (status === 'cancelled' || status === 'Cancelled') {
         notifTitle = 'Appointment Cancelled';
         notifType = 'appointment_cancelled';
-        studentMsg = `Your appointment with ${counselorName} has been cancelled by the welfare officer.`;
-        counselorMsg = `Your session with ${studentName} has been cancelled by the welfare officer.`;
+        studentMsg = `Your appointment with ${counselorName} has been cancelled by the Welfare Officer.`;
+        counselorMsg = `The Welfare Officer has cancelled your ${appointment.sessionType || 'Online'} session with ${studentName} scheduled for ${appointment.date} at ${appointment.time}.`;
+        if (officerNotes) {
+          counselorMsg += ` Reason: "${officerNotes}"`;
+        }
       } else {
-        studentMsg = `Your appointment status has been updated to: ${status}.`;
-        counselorMsg = `The session status with ${studentName} has been updated to: ${status}.`;
+        notifTitle = `Appointment Status: ${status}`;
+        studentMsg = `Your appointment status has been updated to "${status}" by the Welfare Officer.`;
+        counselorMsg = `The Welfare Officer updated the status of your appointment with ${studentName} on ${appointment.date} at ${appointment.time} to "${status}".`;
+        if (officerNotes) {
+          counselorMsg += ` Note: "${officerNotes}"`;
+        }
       }
+    } else if (officerNotes) {
+      notifTitle = 'Officer Note Added';
+      counselorMsg = `The Welfare Officer added a note to your appointment with ${studentName} on ${appointment.date} at ${appointment.time}: "${officerNotes}"`;
     }
 
-    if (appointment.student?._id) {
-      await sendNotification(appointment.student._id, 'student', notifTitle, studentMsg, notifType, appointment._id);
+    // Resolve unique student ID
+    const studentId = appointment.student?._id ? appointment.student._id.toString() : (appointment.student ? appointment.student.toString() : null);
+
+    // Resolve unique counselor ID
+    let counselorId = appointment.counselor?._id
+      ? appointment.counselor._id.toString()
+      : (appointment.counselor ? appointment.counselor.toString() : (appointment.counselorId || ''));
+
+    if ((!counselorId || counselorId === 'c1') && appointment.counselorName) {
+      try {
+        const counselorDoc = await Counselor.findOne({
+          $or: [
+            { name: appointment.counselorName },
+            { firstName: appointment.counselorName.split(' ')[0] },
+          ]
+        }).select('_id').lean();
+        if (counselorDoc?._id) {
+          counselorId = counselorDoc._id.toString();
+        }
+      } catch {}
     }
-    if (appointment.counselor?._id) {
-      await sendNotification(appointment.counselor._id, 'counselor', notifTitle, counselorMsg, notifType, appointment._id);
+    if (!counselorId) counselorId = 'c1';
+
+    const io = req.app.get('io');
+
+    if (studentId) {
+      await sendNotification(studentId, 'student', notifTitle, studentMsg, notifType, appointment._id, io);
     }
+    if (counselorId) {
+      await sendNotification(counselorId, 'counselor', notifTitle, counselorMsg, notifType, appointment._id, io);
+    }
+
+    // Broadcast appointment change to any open dashboards
+    broadcastAppointmentChange('update', {
+      _id: appointment._id.toString(),
+      id: appointment._id.toString(),
+      studentName,
+      counselorName,
+      date: appointment.date,
+      time: appointment.time,
+      sessionType: appointment.sessionType,
+      status: appointment.status,
+      notes: appointment.notes,
+    }, io);
 
     res.status(200).json({
       success: true,
@@ -614,30 +699,66 @@ exports.deleteWelfareAppointment = async (req, res) => {
 
     const studentName = appointment.studentName || (appointment.student ? `${appointment.student.firstName} ${appointment.student.lastName}` : 'Student');
     const counselorName = appointment.counselorName || (appointment.counselor ? `${appointment.counselor.firstName} ${appointment.counselor.lastName}` : 'Counselor');
+    const studentId = appointment.student?._id ? appointment.student._id.toString() : (appointment.student ? appointment.student.toString() : null);
+
+    let counselorId = appointment.counselor?._id
+      ? appointment.counselor._id.toString()
+      : (appointment.counselor ? appointment.counselor.toString() : (appointment.counselorId || ''));
+
+    if ((!counselorId || counselorId === 'c1') && appointment.counselorName) {
+      try {
+        const counselorDoc = await Counselor.findOne({
+          $or: [
+            { name: appointment.counselorName },
+            { firstName: appointment.counselorName.split(' ')[0] },
+          ]
+        }).select('_id').lean();
+        if (counselorDoc?._id) {
+          counselorId = counselorDoc._id.toString();
+        }
+      } catch {}
+    }
+    if (!counselorId) counselorId = 'c1';
+
+    const io = req.app.get('io');
 
     // Notify before deleting
-    if (appointment.student?._id) {
+    if (studentId) {
       await sendNotification(
-        appointment.student._id,
+        studentId,
         'student',
         'Appointment Removed',
-        `Your appointment with ${counselorName} scheduled on ${appointment.date} at ${appointment.time} has been removed by the welfare officer.`,
+        `Your appointment with ${counselorName} scheduled on ${appointment.date} at ${appointment.time} has been removed by the Welfare Officer.`,
         'appointment_deleted',
-        appointment._id
+        appointment._id,
+        io
       );
     }
-    if (appointment.counselor?._id) {
+    if (counselorId) {
       await sendNotification(
-        appointment.counselor._id,
+        counselorId,
         'counselor',
         'Appointment Removed',
-        `The session with ${studentName} scheduled on ${appointment.date} at ${appointment.time} has been removed by the welfare officer.`,
+        `The Welfare Officer has removed the appointment record with ${studentName} scheduled on ${appointment.date} at ${appointment.time}.`,
         'appointment_deleted',
-        appointment._id
+        appointment._id,
+        io
       );
+    }
+
+    // Delete mirror document in counselor_appointments
+    try {
+      const mirrorId = `stu-appt-${id}`;
+      await CounselorAppointment.deleteOne({ _id: mirrorId });
+      console.log(`[Welfare] Deleted mirror ${mirrorId} from counselor_appointments`);
+    } catch (mirrorErr) {
+      console.error('❌ Error deleting counselor_appointments mirror:', mirrorErr.message);
     }
 
     await Appointment.findByIdAndDelete(id);
+
+    // Broadcast deletion
+    broadcastAppointmentChange('delete', { id, _id: id }, io);
 
     res.status(200).json({ success: true, message: 'Appointment deleted and parties notified' });
   } catch (error) {
@@ -650,7 +771,12 @@ exports.deleteWelfareAppointment = async (req, res) => {
 exports.getMyNotifications = async (req, res) => {
   try {
     const userId = req.user?.id;
-    const notifications = await Notification.find({ recipientId: userId })
+    const Welfare = require('../../models/welfare/Welfare');
+    const officer = await Welfare.findById(userId);
+    const searchIds = [userId];
+    if (officer?.staffId) searchIds.push(officer.staffId);
+
+    const notifications = await Notification.find({ recipientId: { $in: searchIds } })
       .sort({ createdAt: -1 })
       .limit(50);
 
@@ -670,5 +796,82 @@ exports.markNotificationRead = async (req, res) => {
   } catch (error) {
     console.error('❌ markNotificationRead error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ── Upload Welfare Officer Profile Photo ──────────────────────────────────────
+exports.uploadProfilePhoto = async (req, res) => {
+  try {
+    const welfareId = req.user?.id;
+    const welfare = await Welfare.findById(welfareId);
+    if (!welfare) {
+      return res.status(404).json({ success: false, message: 'Welfare officer not found' });
+    }
+
+    let photoUrl = null;
+
+    if (req.file) {
+      photoUrl = `/uploads/welfare-photos/${req.file.filename}`;
+    } else if (req.body.profilePicture || req.body.base64) {
+      const rawData = req.body.profilePicture || req.body.base64;
+      if (typeof rawData === 'string' && rawData.startsWith('data:image')) {
+        const matches = rawData.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const ext = matches[1].split('/')[1] || 'jpg';
+          const buffer = Buffer.from(matches[2], 'base64');
+          const uploadDir = path.join(__dirname, '../../../uploads/welfare-photos');
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          const filename = `welfare-${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
+          fs.writeFileSync(path.join(uploadDir, filename), buffer);
+          photoUrl = `/uploads/welfare-photos/${filename}`;
+        } else {
+          photoUrl = rawData;
+        }
+      } else {
+        photoUrl = rawData;
+      }
+    }
+
+    if (!photoUrl) {
+      return res.status(400).json({ success: false, message: 'No photo provided in request' });
+    }
+
+    welfare.profilePicture = photoUrl;
+    await welfare.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile photo uploaded successfully',
+      profilePicture: photoUrl,
+      user: welfare.toSafeObject(),
+    });
+  } catch (error) {
+    console.error('❌ uploadProfilePhoto error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Server error uploading photo' });
+  }
+};
+
+// ── Delete Welfare Officer Profile Photo ──────────────────────────────────────
+exports.deleteProfilePhoto = async (req, res) => {
+  try {
+    const welfareId = req.user?.id;
+    const welfare = await Welfare.findById(welfareId);
+    if (!welfare) {
+      return res.status(404).json({ success: false, message: 'Welfare officer not found' });
+    }
+
+    welfare.profilePicture = null;
+    await welfare.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile photo removed successfully',
+      user: welfare.toSafeObject(),
+    });
+  } catch (error) {
+    console.error('❌ deleteProfilePhoto error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Server error removing photo' });
   }
 };
