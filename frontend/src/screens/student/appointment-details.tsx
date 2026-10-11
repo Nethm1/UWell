@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { studentService } from '../../services/studentService';
 import { notificationService } from '../../services/notificationService';
-
+import JoinVideoCallButton from '../../components/common/JoinVideoCallButton';
 
 const CORAL = '#EF806B';
 const CREAM = '#FFF9F3';
@@ -196,19 +196,6 @@ export default function AppointmentDetailsScreen() {
     });
   };
 
-  const handleJoinCall = async () => {
-    // Navigate to the real video session screen
-    navigation.navigate('VideoCall', {
-      appointmentId: appointmentId || '',
-      role:          'student',
-      displayName:   'Student',          // replaced by auth name in a full impl
-      counselorName: appt.counselorName  || 'Counselor',
-      date:          appt.date           || '',
-      time:          appt.time           || '',
-      sessionType:   'Online',
-    });
-  };
-
   const handleViewLocation = () => {
     if (!counselorLocation) {
       Alert.alert('Location unavailable', 'The office location has not been set for this counselor.');
@@ -316,14 +303,13 @@ export default function AppointmentDetailsScreen() {
         )}
 
         {/* ── Join Call Session — only for confirmed Online appointments ── */}
-        {isUpcoming && appt.sessionType === 'Online' && appt.status === 'confirmed' && !isCancelled && (
-          <Pressable
-            style={({ pressed }) => [styles.callBtn, pressed && { opacity: 0.85 }]}
-            onPress={handleJoinCall}
-          >
-            <Text style={styles.callBtnIcon}>🎥</Text>
-            <Text style={styles.callBtnText}>Start Video Session</Text>
-          </Pressable>
+        {appt.sessionType === 'Online' && !isCancelled && !isCompleted && (
+          <JoinVideoCallButton
+            appointmentId={appointmentId}
+            status={appt.status}
+            sessionType={appt.sessionType}
+            style={styles.callBtn}
+          />
         )}
 
         {/* ── View Location — only for upcoming In Person appointments ── */}

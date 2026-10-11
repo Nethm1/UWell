@@ -47,6 +47,11 @@ const appointmentSchema = new mongoose.Schema(
       enum: ['Online', 'In Person', 'Phone'],
       default: 'Online',
     },
+    videoRoomName: {
+      type: String,
+      default: '',
+      select: false,
+    },
     notes: {
       type: String,
       default: '',

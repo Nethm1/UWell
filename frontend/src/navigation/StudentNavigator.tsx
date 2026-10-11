@@ -26,6 +26,7 @@ import WellbeingCheckScreen from '../screens/student/wellbeing-check';
 import WellbeingRecommendationScreen from '../screens/student/wellbeing-recommendation';
 import VideoSessionScreen from '../screens/student/video-session';
 import VideoCallScreen from '../screens/shared/VideoCallScreen';
+import CallRequestScreen from '../screens/student/CallRequestScreen';
 import WelfareDirectoryScreen from '../screens/student/welfare-directory';
 import WelfareProfileScreen from '../screens/student/welfare-profile';
 import WelfareChatScreen from '../screens/student/welfare-chat';
@@ -69,6 +70,7 @@ const CounselorsStackScreen = () => (
     <CounselorsStack.Screen name="AppointmentDetails" component={AppointmentDetailsScreen} />
     <CounselorsStack.Screen name="VideoSession" component={VideoSessionScreen} />
     <CounselorsStack.Screen name="VideoCall" component={VideoCallScreen} />
+    <CounselorsStack.Screen name="CallRequest" component={CallRequestScreen} />
     <CounselorsStack.Screen name="ReviewBooking" component={ReviewBookingScreen} />
     <CounselorsStack.Screen name="BookingConfirmed" component={BookingConfirmedScreen} />
   </CounselorsStack.Navigator>
@@ -80,6 +82,7 @@ const SessionsStackScreen = () => (
     <SessionsStack.Screen name="AppointmentDetails" component={AppointmentDetailsScreen} />
     <SessionsStack.Screen name="VideoSession" component={VideoSessionScreen} />
     <SessionsStack.Screen name="VideoCall" component={VideoCallScreen} />
+    <SessionsStack.Screen name="CallRequest" component={CallRequestScreen} />
     <SessionsStack.Screen name="StudentChat" component={StudentChatScreen} />
     <SessionsStack.Screen name="Availability" component={AvailabilityScreen} />
     <SessionsStack.Screen name="BookAppointment" component={BookAppointmentScreen} />

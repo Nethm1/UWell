@@ -1,28 +1,7 @@
-/**
- * IncomingCallOverlay
- * Shown to the STUDENT when a counselor initiates a video call.
- * Rendered at root level in App.jsx so it appears over any screen.
- *
- * Flow:
- *  1. Student socket receives "call-invite"
- *  2. Full-screen modal appears with counselor name + ringing pulse
- *  3. Accept  -> emits "call-accepted" -> navigates to VideoCallScreen
- *  4. Decline -> emits "call-declined" -> overlay dismisses
- *  5. 30s timeout -> auto-dismiss + counselor notified
- */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  Animated,
-  Vibration,
-  Platform,
-} from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Modal, Platform, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { connectSocket } from '../../services/socketService';
+import { connectSocket, disconnectSocket } from '../../services/socketService';
 import { useAuth } from '../../context/AuthContext';
 
 const CALL_TIMEOUT_MS = 30000;
@@ -30,165 +9,141 @@ const CALL_TIMEOUT_MS = 30000;
 export default function IncomingCallOverlay() {
   const { user } = useAuth();
   const navigation = useNavigation();
-
   const [callData, setCallData] = useState(null);
   const [timeLeft, setTimeLeft] = useState(30);
-
-  const pulseAnim    = useRef(new Animated.Value(1)).current;
-  const pulseRef     = useRef(null);
-  const timeoutRef   = useRef(null);
+  const [accepting, setAccepting] = useState(false);
+  const [callNotice, setCallNotice] = useState('');
+  const callDataRef = useRef(null);
+  const pulse = useRef(new Animated.Value(1)).current;
+  const timeoutRef = useRef(null);
   const countdownRef = useRef(null);
-  const socketRef    = useRef(null);
-
-  const startPulse = useCallback(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.18, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1,    duration: 600, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    pulseRef.current = anim;
-  }, [pulseAnim]);
+  const pulseLoopRef = useRef(null);
+  const socketRef = useRef(null);
+  const userId = String(user?._id || user?.id || '');
+  const userRole = user?.role;
 
   const dismiss = useCallback(() => {
-    if (timeoutRef.current)   clearTimeout(timeoutRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
-    if (pulseRef.current)     pulseRef.current.stop();
+    if (pulseLoopRef.current) pulseLoopRef.current.stop();
+    timeoutRef.current = null;
+    countdownRef.current = null;
     Vibration.cancel();
+    callDataRef.current = null;
     setCallData(null);
     setTimeLeft(30);
   }, []);
 
-  const handleAccept = useCallback((data) => {
-    const socket = socketRef.current;
-    if (socket) {
-      socket.emit('call-accepted', {
-        counselorId:   data.counselorId,
-        appointmentId: data.appointmentId,
-        roomId:        data.roomId,
-      });
-    }
-    dismiss();
-    navigation.navigate('VideoCall', {
-      appointmentId: data.appointmentId || '',
-      roomId:        data.roomId        || '',
-      role:          'student',
-      displayName:   user?.firstName
-        ? `${user.firstName} ${user.lastName || ''}`.trim()
-        : 'Student',
-      counselorName: data.counselorName || 'Counselor',
-      date:          data.date          || '',
-      time:          data.time          || '',
-    });
-  }, [dismiss, navigation, user]);
-
-  const handleDecline = useCallback((data) => {
-    const socket = socketRef.current;
-    if (socket) {
-      socket.emit('call-declined', {
-        counselorId:   data.counselorId,
-        appointmentId: data.appointmentId,
-      });
-    }
-    dismiss();
-  }, [dismiss]);
-
   useEffect(() => {
-    if (!user || user.role !== 'student') return;
-
+    if (!userId || !['student', 'counselor'].includes(userRole)) return undefined;
     const socket = connectSocket();
     socketRef.current = socket;
+    socket.emit('register-user', { userId, role: userRole });
 
-    const userId = user._id || user.id;
-    if (userId) {
-      socket.emit('register-user', { userId, role: 'student' });
-    }
-
-    const handleInvite = (data) => {
+    const onInvite = (data) => {
+      if (!data?.roomId || !data?.callerId) return;
+      dismiss();
+      callDataRef.current = data;
       setCallData(data);
+      setAccepting(false);
+      setCallNotice('');
       setTimeLeft(30);
-      startPulse();
-
-      if (Platform.OS !== 'web') {
-        Vibration.vibrate([500, 500, 500, 500, 500, 500], true);
-      }
-
+      pulseLoopRef.current = Animated.loop(Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.14, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ]));
+      pulseLoopRef.current.start();
+      if (Platform.OS !== 'web') Vibration.vibrate([500, 500, 500, 500], true);
       timeoutRef.current = setTimeout(() => {
         socket.emit('call-declined', {
-          counselorId:   data.counselorId,
-          appointmentId: data.appointmentId,
-          reason:        'timeout',
+          callerId: data.callerId, callerRole: data.callerRole, callId: data.callId,
+          studentId: data.studentId, counselorId: data.counselorId, reason: 'timeout',
         });
         dismiss();
       }, CALL_TIMEOUT_MS);
-
-      countdownRef.current = setInterval(() => {
-        setTimeLeft((t) => {
-          if (t <= 1) { clearInterval(countdownRef.current); return 0; }
-          return t - 1;
-        });
-      }, 1000);
+      countdownRef.current = setInterval(() => setTimeLeft((seconds) => Math.max(0, seconds - 1)), 1000);
+    };
+    const onCancelled = (data) => {
+      if (data?.callId && data.callId === callDataRef.current?.callId) dismiss();
     };
 
-    socket.on('call-invite', handleInvite);
-    return () => { socket.off('call-invite', handleInvite); };
-  }, [user, startPulse, dismiss]);
+    socket.on('call-invite', onInvite);
+    socket.on('call-cancelled', onCancelled);
+    return () => {
+      socket.off('call-invite', onInvite);
+      socket.off('call-cancelled', onCancelled);
+      dismiss();
+      disconnectSocket();
+    };
+  }, [userId, userRole, pulse, dismiss]);
+
+  const accept = () => {
+    if (!callData || accepting) return;
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      setCallNotice('Connection lost. Reconnect to answer the call.');
+      return;
+    }
+    setAccepting(true);
+    const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.name || (user?.role === 'student' ? 'Student' : 'Counselor');
+    socket.emit('call-accepted', {
+      callerId: callData.callerId, callerRole: callData.callerRole, callId: callData.callId,
+      roomId: callData.roomId, studentId: callData.studentId, counselorId: callData.counselorId,
+      appointmentId: callData.appointmentId,
+    }, (result) => {
+      if (!result?.accepted) {
+        setAccepting(false);
+        setCallNotice('This call has already been answered or has expired.');
+        return;
+      }
+      const params = {
+        appointmentId: callData.appointmentId || '', roomId: callData.roomId,
+        autoOpenInBrowser: true,
+        role: user?.role, displayName,
+        counselorName: callData.counselorName || 'Counselor',
+        studentName: callData.studentName || 'Student', date: callData.date || '', time: callData.time || '',
+      };
+      dismiss();
+      navigation.navigate('VideoCall', params);
+    });
+  };
+
+  const decline = () => {
+    if (callData) socketRef.current?.emit('call-declined', {
+      callerId: callData.callerId, callerRole: callData.callerRole, callId: callData.callId,
+      studentId: callData.studentId, counselorId: callData.counselorId, reason: 'declined',
+    });
+    dismiss();
+  };
 
   if (!callData) return null;
-
-  const initials = (callData.counselorName || 'C')
-    .split(' ')
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const callerName = callData.callerRole === 'student'
+    ? (callData.studentName || 'Student')
+    : (callData.counselorName || 'Counselor');
+  const initials = callerName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 
   return (
-    <Modal transparent animationType="fade" visible statusBarTranslucent>
+    <Modal transparent animationType="fade" visible statusBarTranslucent onRequestClose={decline}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-
-          <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulseAnim }] }]}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarInitials}>{initials}</Text>
-            </View>
+          <Animated.View style={[styles.avatarRing, { transform: [{ scale: pulse }] }]}>
+            <View style={styles.avatar}><Text style={styles.avatarInitials}>{initials || 'UW'}</Text></View>
           </Animated.View>
-
-          <Text style={styles.callerLabel}>INCOMING SESSION</Text>
-          <Text style={styles.callerName}>{callData.counselorName || 'Your Counselor'}</Text>
-          <Text style={styles.callerSub}>UWell Video Counseling Session</Text>
-
-          {(!!callData.date || !!callData.time) && (
-            <View style={styles.sessionMeta}>
-              {!!callData.date && <Text style={styles.sessionMetaText}>?? {callData.date}</Text>}
-              {!!callData.time && <Text style={styles.sessionMetaText}>?? {callData.time}</Text>}
-            </View>
-          )}
-
-          <Text style={styles.countdown}>Ringing� {timeLeft}s</Text>
-
+          <Text style={styles.callerLabel}>{callData.callerRole === 'student' ? 'INCOMING STUDENT CALL' : 'INCOMING COUNSELOR CALL'}</Text>
+          <Text style={styles.callerName}>{callerName}</Text>
+          <Text style={styles.callerSub}>UWell video counseling session</Text>
+          {(callData.date || callData.time) ? <Text style={styles.sessionMeta}>{[callData.date, callData.time].filter(Boolean).join(' · ')}</Text> : null}
+          <Text style={styles.countdown}>Ringing · {timeLeft}s</Text>
+          {callNotice ? <Text style={styles.countdown}>{callNotice}</Text> : null}
+          {accepting ? <ActivityIndicator color="#73D996" /> : null}
           <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.declineBtn]}
-              onPress={() => handleDecline(callData)}
-              accessibilityLabel="Decline call"
-            >
-              <Text style={styles.actionIcon}>??</Text>
+            <TouchableOpacity style={[styles.actionBtn, styles.declineBtn]} onPress={decline} disabled={accepting} accessibilityLabel="Decline call">
               <Text style={styles.declineText}>Decline</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.acceptBtn]}
-              onPress={() => handleAccept(callData)}
-              accessibilityLabel="Accept call"
-            >
-              <Text style={styles.actionIcon}>??</Text>
-              <Text style={styles.acceptText}>Join Session</Text>
+            <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} onPress={accept} disabled={accepting} accessibilityLabel="Answer call">
+              <Text style={styles.acceptText}>Answer</Text>
             </TouchableOpacity>
           </View>
-
         </View>
       </View>
     </Modal>
@@ -196,57 +151,20 @@ export default function IncomingCallOverlay() {
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    width: '100%',
-    backgroundColor: '#1A1A2E',
-    borderRadius: 28,
-    paddingTop: 40,
-    paddingBottom: 32,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2A2A4A',
-  },
-  avatarRing: {
-    width: 124,
-    height: 124,
-    borderRadius: 62,
-    backgroundColor: '#EF806B1A',
-    borderWidth: 3,
-    borderColor: '#EF806B55',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  avatar: {
-    width: 98,
-    height: 98,
-    borderRadius: 49,
-    backgroundColor: '#EF806B22',
-    borderWidth: 2,
-    borderColor: '#EF806B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitials: { fontSize: 34, fontWeight: '700', color: '#EF806B' },
-  callerLabel:    { color: '#8AAACC', fontSize: 11, fontWeight: '700', letterSpacing: 1.4, marginBottom: 6 },
-  callerName:     { color: '#FFFFFF', fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 4 },
-  callerSub:      { color: '#8AAACC', fontSize: 13, textAlign: 'center', marginBottom: 16 },
-  sessionMeta:    { flexDirection: 'row', gap: 14, marginBottom: 14 },
-  sessionMetaText:{ color: '#D0E0F5', fontSize: 12 },
-  countdown:      { color: '#EF806B', fontSize: 13, fontWeight: '600', marginBottom: 30 },
-  actions:        { flexDirection: 'row', gap: 16, width: '100%' },
-  actionBtn:      { flex: 1, height: 66, borderRadius: 20, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  declineBtn:     { backgroundColor: '#2A0A0A', borderWidth: 1.5, borderColor: '#C0392B' },
-  acceptBtn:      { backgroundColor: '#0A2A18', borderWidth: 1.5, borderColor: '#27AE60' },
-  actionIcon:     { fontSize: 26 },
-  declineText:    { color: '#E74C3C', fontSize: 12, fontWeight: '700' },
-  acceptText:     { color: '#27AE60', fontSize: 12, fontWeight: '700' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(8,12,25,0.88)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  card: { width: '100%', maxWidth: 440, backgroundColor: '#1A1A2E', borderRadius: 28, paddingVertical: 36, paddingHorizontal: 24, alignItems: 'center', borderWidth: 1, borderColor: '#343453' },
+  avatarRing: { width: 118, height: 118, borderRadius: 60, backgroundColor: '#EF806B20', borderWidth: 2, borderColor: '#EF806B70', alignItems: 'center', justifyContent: 'center', marginBottom: 22 },
+  avatar: { width: 92, height: 92, borderRadius: 48, backgroundColor: '#EF806B25', borderWidth: 2, borderColor: '#EF806B', alignItems: 'center', justifyContent: 'center' },
+  avatarInitials: { fontSize: 30, fontWeight: '800', color: '#EF806B' },
+  callerLabel: { color: '#9AB0CC', fontSize: 10, fontWeight: '800', letterSpacing: 1.3, marginBottom: 7 },
+  callerName: { color: '#FFFFFF', fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  callerSub: { color: '#9AB0CC', fontSize: 13, marginTop: 5 },
+  sessionMeta: { color: '#D0E0F5', fontSize: 12, marginTop: 12 },
+  countdown: { color: '#EF806B', fontSize: 13, fontWeight: '700', marginTop: 18, marginBottom: 25 },
+  actions: { flexDirection: 'row', gap: 14, width: '100%' },
+  actionBtn: { flex: 1, minHeight: 54, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  declineBtn: { backgroundColor: '#321D25', borderWidth: 1, borderColor: '#C84D54' },
+  acceptBtn: { backgroundColor: '#183A2A', borderWidth: 1, borderColor: '#43A96B' },
+  declineText: { color: '#FF7F7F', fontSize: 14, fontWeight: '800' },
+  acceptText: { color: '#73D996', fontSize: 14, fontWeight: '800' },
 });

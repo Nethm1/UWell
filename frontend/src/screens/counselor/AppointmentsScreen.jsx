@@ -17,6 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '../../theme';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
+import JoinVideoCallButton from '../../components/common/JoinVideoCallButton';
 import { counselorService } from '../../services/counselorService';
 import { notificationService } from '../../services/notificationService';
 
@@ -92,17 +93,6 @@ const AppointmentsScreen = ({ navigation }) => {
     screen: 'StudentChat',
     params: { studentId: item.studentId, studentName: item.studentName },
   });
-
-  // Navigate to real video session (registered in AppointmentsStack)
-  const handleStartVideo = (item) => {
-    navigation.navigate('VideoSession', {
-      appointmentId: item.id || item._id || '',
-      studentId:     item.studentId    || '',
-      studentName:   item.studentName  || 'Student',
-      date:          item.date         || '',
-      time:          item.time         || '',
-    });
-  };
 
   // Open counselor's own office location in Google Maps so student can find them
   const handleViewLocation = (item) => {
@@ -188,14 +178,13 @@ const AppointmentsScreen = ({ navigation }) => {
             <>
               {/* ── Video session (Online) or location link (In Person) ── */}
               {item.sessionType === 'Online' && (
-                <TouchableOpacity
+                <JoinVideoCallButton
+                  appointmentId={item.id || item._id}
+                  status={item.status}
+                  sessionType={item.sessionType}
                   style={[styles.actionBtn, styles.videoSessionBtn, { marginTop: 8 }]}
-                  onPress={() => handleStartVideo(item)}
-                  accessibilityLabel="Start video session"
-                >
-                  <Ionicons name="videocam-outline" size={15} color="#fff" />
-                  <Text style={styles.videoSessionBtnText}>Start Video Session</Text>
-                </TouchableOpacity>
+                  textStyle={styles.videoSessionBtnText}
+                />
               )}
               {item.sessionType === 'In Person' && (
                 <TouchableOpacity

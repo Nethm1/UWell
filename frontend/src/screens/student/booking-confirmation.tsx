@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import JoinVideoCallButton from '../../components/common/JoinVideoCallButton';
 
 export default function BookingConfirmationScreen() {
   const navigation = useNavigation<any>();
@@ -24,18 +25,6 @@ export default function BookingConfirmationScreen() {
   } = params;
 
   const isOnline = sessionType === 'Online';
-
-  const handleJoinVideoNow = () => {
-    navigation.navigate('VideoCall', {
-      appointmentId: appointmentId || '',
-      role:          'student',
-      displayName:   'Student',
-      counselorName: counselorName || 'Counselor',
-      date:          date          || '',
-      time:          time          || '',
-      sessionType:   'Online',
-    });
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -132,7 +121,7 @@ export default function BookingConfirmationScreen() {
               </Text>
               {isOnline && (
                 <Text style={styles.onlineHint}>
-                  You can join the video session below
+                  Join after your counselor confirms the appointment.
                 </Text>
               )}
             </View>
@@ -141,18 +130,12 @@ export default function BookingConfirmationScreen() {
 
         {/* ── Join Video Now (Online only) ── */}
         {isOnline && (
-          <Pressable
-            style={({ pressed }) => [styles.videoJoinBtn, pressed && { opacity: 0.85 }]}
-            onPress={handleJoinVideoNow}
-            accessibilityLabel="Join Video Session Now"
-          >
-            <Text style={styles.videoJoinIcon}>🎥</Text>
-            <View>
-              <Text style={styles.videoJoinTitle}>Join Video Session Now</Text>
-              <Text style={styles.videoJoinSub}>Connect directly with your counselor</Text>
-            </View>
-            <Text style={styles.videoJoinArrow}>›</Text>
-          </Pressable>
+          <JoinVideoCallButton
+            appointmentId={appointmentId}
+            status="upcoming"
+            sessionType={sessionType}
+            style={styles.videoJoinBtn}
+          />
         )}
 
         {/* Reminder */}

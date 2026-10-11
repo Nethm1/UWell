@@ -1,9 +1,12 @@
 const http = require('http');
 const express = require('express');
+const crypto = require('crypto');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 const connectDB = require('./src/config/db');
+const CounselorStudent = require('./src/models/counselor/CounselorStudent');
 const { Server: SocketServer } = require('socket.io');
 
 // Always load this backend's environment, including when npm is run from the
@@ -36,27 +39,87 @@ app.set('io', io);
 const { setGlobalIo } = require('./src/utils/notificationHelper');
 setGlobalIo(io);
 
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      if (decoded?.id && decoded?.role) {
+        socket.data.userId = String(decoded.id);
+        socket.data.role = String(decoded.role);
+      }
+    }
+    next();
+  } catch {
+    next();
+  }
+});
+
 // Track which sockets are in which room
 const roomParticipants = new Map(); // roomId → Set<socketId>
+const activeCalls = new Map(); // callId → authorized participant and room data
+const pendingCallUsers = new Set(); // reserves participants while an invite resolves its student link
+const counselorCallAvailability = new Map(); // userId → whether counselor accepts new video calls
+
+const findCallForUser = (userId) => [...activeCalls.values()].find((call) => call.participants.has(String(userId)));
+const finishCall = (call) => {
+  if (call?.timeoutRef) clearTimeout(call.timeoutRef);
+  if (call?.setupTimeoutRef) clearTimeout(call.setupTimeoutRef);
+  if (call) activeCalls.delete(call.callId);
+};
 
 io.on('connection', (socket) => {
+  if (socket.data.userId) socket.join('user:' + socket.data.userId);
+  if (socket.data.role === 'counselor' && !counselorCallAvailability.has(socket.data.userId)) {
+    counselorCallAvailability.set(socket.data.userId, true);
+  }
+  if (socket.data.role === 'counselor') {
+    io.emit('counselor-call-availability', {
+      counselorId: String(socket.data.userId),
+      available: counselorCallAvailability.get(String(socket.data.userId)) !== false,
+    });
+  }
   console.log(`[Socket] connected: ${socket.id}`);
 
   // ── join-room ──────────────────────────────────────────────────────────────
   // payload: { roomId, userName, role ('student' | 'counselor') }
-  socket.on('join-room', ({ roomId, userName, role }) => {
+  socket.on('join-room', (payload = {}) => {
+    const { roomId, userName } = payload || {};
     if (!roomId) return;
+    const call = [...activeCalls.values()].find((activeCall) => activeCall.roomId === roomId);
+    const userId = String(socket.data.userId);
+    const isCaller = call?.callerId === userId && call.callerRole === socket.data.role && call.callerSocketId === socket.id;
+    const isTarget = call?.targetUserId === userId && call.targetRole === socket.data.role && call.targetSocketId === socket.id;
+    if (!call || !call.accepted || (!isCaller && !isTarget)) {
+      socket.emit('call-room-unavailable', { roomId });
+      return;
+    }
+
+    if (socket.rooms.has(roomId)) {
+      socket.emit('room-joined', { roomId, participantCount: roomParticipants.get(roomId)?.size || 1 });
+      return;
+    }
+    call.joinedParticipants ||= new Map();
+    const existingSocketId = call.joinedParticipants.get(String(socket.data.userId));
+    if (existingSocketId && existingSocketId !== socket.id && io.sockets.sockets.has(existingSocketId)) {
+      socket.emit('call-room-unavailable', { roomId, reason: 'participant-already-joined' });
+      return;
+    }
 
     socket.join(roomId);
+    call.joinedParticipants.set(String(socket.data.userId), socket.id);
     socket.data.roomId   = roomId;
     socket.data.userName = userName || 'Unknown';
-    socket.data.role     = role     || 'student';
 
     if (!roomParticipants.has(roomId)) roomParticipants.set(roomId, new Set());
     roomParticipants.get(roomId).add(socket.id);
 
     const count = roomParticipants.get(roomId).size;
-    console.log(`[Socket] ${socket.id} (${role}) joined room ${roomId}. Total: ${count}`);
+    if (count >= 2 && call.setupTimeoutRef) {
+      clearTimeout(call.setupTimeoutRef);
+      call.setupTimeoutRef = null;
+    }
+    console.log(`[Socket] ${socket.id} (${socket.data.role}) joined room ${roomId}. Total: ${count}`);
 
     // Tell this socket how many others are already in the room
     socket.emit('room-joined', { roomId, participantCount: count });
@@ -66,62 +129,218 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       userName: socket.data.userName,
       role:     socket.data.role,
+      roomId,
     });
   });
 
   // ── leave-room ─────────────────────────────────────────────────────────────
-  socket.on('leave-room', ({ roomId }) => {
-    _leaveRoom(socket, roomId);
+  socket.on('leave-room', (payload = {}) => {
+    const { roomId } = payload || {};
+    if (roomId && socket.rooms.has(roomId)) _leaveRoom(socket, roomId);
   });
 
   // ── WebRTC signaling relay ─────────────────────────────────────────────────
   // Forward offer/answer/ICE candidate to everyone else in the room
-  socket.on('rtc-offer',     (payload) => socket.to(payload.roomId).emit('rtc-offer',     { ...payload, from: socket.id }));
-  socket.on('rtc-answer',    (payload) => socket.to(payload.roomId).emit('rtc-answer',    { ...payload, from: socket.id }));
-  socket.on('rtc-ice',       (payload) => socket.to(payload.roomId).emit('rtc-ice',       { ...payload, from: socket.id }));
+  const relayToAuthorizedPeer = (event, payload = {}) => {
+    payload = payload || {};
+    const call = [...activeCalls.values()].find((activeCall) => activeCall.roomId === payload.roomId);
+    if (!call?.accepted || !call.participants.has(String(socket.data.userId)) || !socket.rooms.has(call.roomId)) return;
+    socket.to(call.roomId).emit(event, { ...payload, from: socket.id });
+  };
+  socket.on('rtc-offer', (payload) => relayToAuthorizedPeer('rtc-offer', payload));
+  socket.on('rtc-answer', (payload) => relayToAuthorizedPeer('rtc-answer', payload));
+  socket.on('rtc-ice', (payload) => relayToAuthorizedPeer('rtc-ice', payload));
 
   // ── user registration ──────────────────────────────────────────────────────
-  socket.on('register-user', ({ userId, role }) => {
-    if (!userId) return;
-    if (socket.data.userId && socket.data.userId !== userId) {
-      socket.leave('user:' + socket.data.userId);
-      console.log('[Socket] user switch: left user:' + socket.data.userId);
+  socket.on('register-user', (payload = {}, acknowledge) => {
+    const { userId, role } = payload || {};
+    if (userId) {
+      if (socket.data.userId && socket.data.userId !== String(userId)) {
+        socket.leave('user:' + socket.data.userId);
+        console.log('[Socket] user switch: left user:' + socket.data.userId);
+      }
+      socket.data.userId = String(userId);
+      socket.data.role   = role || socket.data.role || 'student';
+      socket.join('user:' + socket.data.userId);
+      console.log('[Socket] registered user ' + socket.data.userId + ' (' + socket.data.role + ') -> socket ' + socket.id);
     }
-    socket.data.userId = userId;
-    socket.data.role   = role || 'student';
-    socket.join('user:' + userId);
-    console.log('[Socket] registered user ' + userId + ' (' + role + ') -> socket ' + socket.id);
+    if (typeof acknowledge === 'function') {
+      acknowledge({ registered: Boolean(socket.data.userId) });
+    }
+  });
+
+  socket.on('check-user-online', (payload = {}, acknowledge) => {
+    const { userId } = payload || {};
+    const sockets = userId ? io.sockets.adapter.rooms.get('user:' + userId) : null;
+    const clients = sockets ? [...sockets].map((id) => io.sockets.sockets.get(id)).filter(Boolean) : [];
+    const matchingClients = clients.filter((client) => client.data.role === 'counselor');
+    const online = matchingClients.length > 0 && counselorCallAvailability.get(String(userId)) !== false;
+    if (typeof acknowledge === 'function') acknowledge({ online });
+  });
+
+  socket.on('check-call-availability', (acknowledge) => {
+    if (typeof acknowledge !== 'function') return;
+    if (socket.data.role !== 'counselor') return acknowledge({ available: false });
+    acknowledge({ available: counselorCallAvailability.get(String(socket.data.userId)) !== false });
+  });
+
+  socket.on('set-call-availability', (payload = {}, acknowledge) => {
+    const { available } = payload || {};
+    if (socket.data.role !== 'counselor' || typeof available !== 'boolean') {
+      if (typeof acknowledge === 'function') acknowledge({ ok: false });
+      return;
+    }
+    counselorCallAvailability.set(String(socket.data.userId), available);
+    io.emit('counselor-call-availability', { counselorId: String(socket.data.userId), available });
+    if (typeof acknowledge === 'function') acknowledge({ ok: true, available });
   });
 
   // ── call-invite: Counselor -> Student ──────────────────────────────────────
-  socket.on('call-invite', (payload) => {
-    const { studentId } = payload;
-    if (!studentId) return;
-    console.log('[Socket] call-invite from ' + socket.id + ' -> user:' + studentId);
-    io.to('user:' + studentId).emit('call-invite', Object.assign({}, payload, { from: socket.id }));
+  socket.on('call-invite', async (payload = {}, acknowledge) => {
+    payload = payload || {};
+    const callerId = String(socket.data.userId);
+    if (!['student', 'counselor'].includes(socket.data.role)) {
+      if (typeof acknowledge === 'function') acknowledge({ status: 'unavailable' });
+      return;
+    }
+    if (pendingCallUsers.has(callerId) || findCallForUser(callerId)) {
+      if (typeof acknowledge === 'function') acknowledge({ status: 'busy', reason: 'caller' });
+      return;
+    }
+
+    pendingCallUsers.add(callerId);
+    let reservedTargetId = null;
+    try {
+      const targetRole = payload.targetRole || (socket.data.role === 'student' ? 'counselor' : 'student');
+      if (targetRole === socket.data.role || !['student', 'counselor'].includes(targetRole)) {
+        if (typeof acknowledge === 'function') acknowledge({ status: 'unavailable' });
+        return;
+      }
+
+      let targetUserId = String(payload.targetUserId || (socket.data.role === 'student' ? payload.counselorId : payload.studentId) || '');
+      if (socket.data.role === 'counselor') {
+        const linkedStudent = await CounselorStudent.findOne({
+          counselorId: callerId,
+          $or: [{ _id: targetUserId }, { sourceStudentId: targetUserId }],
+        }).select('_id sourceStudentId');
+        if (!linkedStudent) {
+          if (typeof acknowledge === 'function') acknowledge({ status: 'unavailable' });
+          return;
+        }
+        targetUserId = String(linkedStudent.sourceStudentId || '');
+      }
+
+      const callerBusy = !!findCallForUser(callerId);
+      const targetBusy = !!findCallForUser(targetUserId) || pendingCallUsers.has(targetUserId);
+      if (!targetUserId || targetUserId === callerId || callerBusy || targetBusy) {
+        if (typeof acknowledge === 'function') acknowledge({ status: 'busy', reason: callerBusy ? 'caller' : 'target', targetUserId });
+        return;
+      }
+      pendingCallUsers.add(targetUserId);
+      reservedTargetId = targetUserId;
+
+      const targetRoom = 'user:' + targetUserId;
+      const targetSockets = io.sockets.adapter.rooms.get(targetRoom);
+      const targetClients = targetSockets ? [...targetSockets].map((id) => io.sockets.sockets.get(id)).filter((client) => client?.data.role === targetRole) : [];
+      const online = targetClients.length > 0 && (targetRole !== 'counselor' || counselorCallAvailability.get(targetUserId) !== false);
+      if (!online) {
+        if (typeof acknowledge === 'function') acknowledge({ status: 'offline', targetUserId });
+        return;
+      }
+      if (!socket.connected) {
+        if (typeof acknowledge === 'function') acknowledge({ status: 'unavailable' });
+        return;
+      }
+
+      const callId = crypto.randomUUID();
+      const roomId = 'uwell-' + crypto.randomUUID();
+      const participants = new Set([callerId, targetUserId]);
+      const call = { callId, roomId, callerId, callerRole: socket.data.role, callerSocketId: socket.id, targetUserId, targetRole, participants, accepted: false };
+      activeCalls.set(callId, call);
+      call.timeoutRef = setTimeout(() => {
+        if (activeCalls.get(callId) !== call || call.accepted) return;
+        finishCall(call);
+        io.to(call.callerSocketId).emit('call-declined', { callId, reason: 'timeout' });
+        io.to(targetRoom).emit('call-cancelled', { callId });
+      }, 35000);
+      io.to(targetRoom).emit('call-invite', {
+        ...payload,
+        callId,
+        roomId,
+        targetUserId,
+        targetRole,
+        callerId,
+        callerRole: socket.data.role,
+      });
+      if (typeof acknowledge === 'function') acknowledge({ status: 'ringing', callId, roomId, targetUserId });
+    } catch (error) {
+      console.error('[Socket] Failed to create call invite:', error.message);
+      if (typeof acknowledge === 'function') acknowledge({ status: 'unavailable' });
+    } finally {
+      pendingCallUsers.delete(callerId);
+      if (reservedTargetId) pendingCallUsers.delete(reservedTargetId);
+    }
   });
 
   // ── call-accepted: Student -> Counselor ────────────────────────────────────
-  socket.on('call-accepted', (payload) => {
-    const { counselorId } = payload;
-    if (!counselorId) return;
-    console.log('[Socket] call-accepted from ' + socket.id + ' -> user:' + counselorId);
-    io.to('user:' + counselorId).emit('call-accepted', Object.assign({}, payload, { from: socket.id }));
+  socket.on('call-accepted', (payload = {}, acknowledge) => {
+    const call = activeCalls.get(payload?.callId);
+    if (!call || call.targetUserId !== String(socket.data.userId) || socket.data.role !== call.targetRole || payload?.roomId !== call.roomId || call.accepted || !io.sockets.sockets.has(call.callerSocketId)) {
+      if (call && !call.accepted && !io.sockets.sockets.has(call.callerSocketId)) {
+        finishCall(call);
+        io.to('user:' + call.targetUserId).emit('call-cancelled', { callId: call.callId });
+      }
+      if (typeof acknowledge === 'function') acknowledge({ accepted: false });
+      return;
+    }
+    call.accepted = true;
+    call.targetSocketId = socket.id;
+    if (call.timeoutRef) clearTimeout(call.timeoutRef);
+    call.setupTimeoutRef = setTimeout(() => {
+      if (activeCalls.get(call.callId) !== call || !call.accepted) return;
+      finishCall(call);
+      io.to('user:' + call.callerId).emit('session-ended', { roomId: call.roomId, reason: 'participants-did-not-join' });
+      io.to('user:' + call.targetUserId).emit('session-ended', { roomId: call.roomId, reason: 'participants-did-not-join' });
+    }, 45000);
+    io.to(call.callerSocketId).emit('call-accepted', { callId: call.callId, roomId: call.roomId, from: socket.id });
+    io.to('user:' + call.targetUserId).except(socket.id).emit('call-cancelled', { callId: call.callId });
+    if (typeof acknowledge === 'function') acknowledge({ accepted: true });
   });
 
   // ── call-declined: Student -> Counselor ────────────────────────────────────
   socket.on('call-declined', (payload) => {
-    const { counselorId } = payload;
-    if (!counselorId) return;
-    console.log('[Socket] call-declined from ' + socket.id + ' -> user:' + counselorId);
-    io.to('user:' + counselorId).emit('call-declined', Object.assign({}, payload, { from: socket.id }));
+    const call = activeCalls.get(payload?.callId);
+    if (!call || call.accepted || call.targetUserId !== String(socket.data.userId) || socket.data.role !== call.targetRole) return;
+    finishCall(call);
+    io.to(call.callerSocketId).emit('call-declined', { callId: call.callId, reason: payload.reason || 'declined', from: socket.id });
+    io.to('user:' + call.targetUserId).except(socket.id).emit('call-cancelled', { callId: call.callId });
+  });
+  socket.on('call-cancel', (payload) => {
+    const call = activeCalls.get(payload?.callId);
+    if (!call || call.callerId !== String(socket.data.userId) || call.callerRole !== socket.data.role || call.callerSocketId !== socket.id) return;
+    finishCall(call);
+    if (call.accepted) {
+      const data = { roomId: call.roomId, reason: 'caller-cancelled' };
+      io.to('user:' + call.callerId).emit('session-ended', data);
+      io.to('user:' + call.targetUserId).emit('session-ended', data);
+    } else {
+      io.to('user:' + call.targetUserId).emit('call-cancelled', { callId: call.callId });
+    }
   });
   // ── call-control signals ───────────────────────────────────────────────────
   // Forward mute/video toggle/end so the other side's UI updates
-  socket.on('peer-muted',       (p) => socket.to(p.roomId).emit('peer-muted',       { ...p, from: socket.id }));
-  socket.on('peer-video-off',   (p) => socket.to(p.roomId).emit('peer-video-off',   { ...p, from: socket.id }));
-  socket.on('peer-video-on',    (p) => socket.to(p.roomId).emit('peer-video-on',    { ...p, from: socket.id }));
-  socket.on('session-ended',    (p) => socket.to(p.roomId).emit('session-ended',    { from: socket.id }));
+  socket.on('peer-muted', (payload) => relayToAuthorizedPeer('peer-muted', payload));
+  socket.on('peer-video-off', (payload) => relayToAuthorizedPeer('peer-video-off', payload));
+  socket.on('peer-video-on', (payload) => relayToAuthorizedPeer('peer-video-on', payload));
+  socket.on('session-ended', (payload) => {
+    const call = [...activeCalls.values()].find((activeCall) => activeCall.roomId === payload?.roomId);
+    const isCaller = call?.callerSocketId === socket.id && call.callerId === String(socket.data.userId);
+    const isTarget = call?.targetSocketId === socket.id && call.targetUserId === String(socket.data.userId);
+    if (!call || !call.accepted || (!isCaller && !isTarget)) return;
+    finishCall(call);
+    io.to('user:' + call.callerId).emit('session-ended', { roomId: call.roomId, from: socket.id });
+    io.to('user:' + call.targetUserId).emit('session-ended', { roomId: call.roomId, from: socket.id });
+  });
 
   // ── Welfare Chat & Emergency Real-time Signals ─────────────────────────────
   socket.on('welfare:typing', ({ recipientId, isTyping, conversationId }) => {
@@ -144,6 +363,22 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const roomId = socket.data.roomId;
     if (roomId) _leaveRoom(socket, roomId);
+    for (const call of [...activeCalls.values()]) {
+      if (call.callerSocketId !== socket.id && call.targetSocketId !== socket.id) continue;
+      finishCall(call);
+      if (call.accepted) {
+        io.to('user:' + call.callerId).emit('session-ended', { roomId: call.roomId, reason: 'participant-disconnected' });
+        io.to('user:' + call.targetUserId).emit('session-ended', { roomId: call.roomId, reason: 'participant-disconnected' });
+      } else if (call.callerSocketId === socket.id) {
+        io.to('user:' + call.targetUserId).emit('call-cancelled', { callId: call.callId });
+      } else {
+        io.to('user:' + call.callerId).emit('call-declined', { callId: call.callId, reason: 'offline' });
+      }
+    }
+    if (socket.data.role === 'counselor' && !(io.sockets.adapter.rooms.get('user:' + socket.data.userId)?.size)) {
+      counselorCallAvailability.delete(String(socket.data.userId));
+      io.emit('counselor-call-availability', { counselorId: String(socket.data.userId), available: false });
+    }
     console.log(`[Socket] disconnected: ${socket.id}`);
   });
 });
@@ -155,7 +390,7 @@ function _leaveRoom(socket, roomId) {
     set.delete(socket.id);
     if (set.size === 0) roomParticipants.delete(roomId);
   }
-  socket.to(roomId).emit('peer-left', { socketId: socket.id, userName: socket.data.userName });
+  socket.to(roomId).emit('peer-left', { roomId, socketId: socket.id, userName: socket.data.userName });
   console.log(`[Socket] ${socket.id} left room ${roomId}`);
 }
 
@@ -217,6 +452,9 @@ app.use('/api/student/mood', require('./src/routes/student/moodRoutes'));
 
 // Appointments: CRUD /api/student/appointments — must be before studentRoutes
 app.use('/api/student/appointments', require('./src/routes/student/appointmentRoutes'));
+
+// Appointment-scoped Jitsi link, shared by the assigned student and counselor.
+app.use('/api/appointments', require('./src/routes/appointmentVideoRoutes'));
 
 // Private student-to-counselor conversations for booked sessions.
 app.use('/api/student/messages', require('./src/routes/student/messageRoutes'));
@@ -368,7 +606,9 @@ function listen(port, label) {
       const description = error.code === 'EADDRINUSE'
         ? `Port ${port} is already in use.`
         : `Failed to start on port ${port}.`;
-      reject(new Error(`${label}: ${description} ${error.message}`));
+      const startupError = new Error(`${label}: ${description} ${error.message}`);
+      startupError.code = error.code;
+      reject(startupError);
     });
   });
 }
@@ -378,7 +618,14 @@ async function startServers() {
     await connectDB();
 
     // The mobile app uses ALT_PORT; PORT remains available for local/API clients.
-    await listen(PORT, 'UWell Backend');
+    // A busy optional primary port must not prevent the mobile API/socket server
+    // from starting on ALT_PORT.
+    try {
+      await listen(PORT, 'UWell Backend');
+    } catch (error) {
+      if (error.code !== 'EADDRINUSE' || PORT === ALT_PORT) throw error;
+      console.warn(`⚠️ Port ${PORT} is already in use; continuing with port ${ALT_PORT}.`);
+    }
     if (ALT_PORT && ALT_PORT !== PORT) {
       await listen(ALT_PORT, 'UWell Backend (Firewall-friendly port)');
     }
@@ -387,7 +634,7 @@ async function startServers() {
     console.log('   Auth   → POST /api/auth/student/register');
     console.log('            POST /api/auth/student/login');
     console.log('   Student→ GET/PUT /api/student/profile');
-    console.log('   Socket → ws://0.0.0.0:' + PORT + ' (video signaling)');
+    console.log('   Socket → ws://0.0.0.0:' + ALT_PORT + ' (video signaling)');
   } catch (error) {
     console.error('❌ Backend startup failed:', error.message);
     process.exit(1);
