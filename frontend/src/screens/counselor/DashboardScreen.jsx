@@ -5,6 +5,7 @@ import {
   Image,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   useWindowDimensions,
@@ -14,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { counselorService } from '../../services/counselorService';
 import { useAuth } from '../../context/AuthContext';
+import { connectSocket } from '../../services/socketService';
 
 const C = {
   page: '#FFF8F2',
@@ -215,6 +217,30 @@ const DashboardScreen = ({ navigation }) => {
   const [stats, setStats] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [students, setStudents] = useState([]);
+  const [callAvailable, setCallAvailable] = useState(true);
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
+
+  useEffect(() => {
+    const socket = connectSocket();
+    const readAvailability = () => socket.timeout(7000).emit('check-call-availability', (error, result) => {
+      if (!error && typeof result?.available === 'boolean') setCallAvailable(result.available);
+    });
+    socket.on('connect', readAvailability);
+    if (socket.connected) readAvailability();
+    return () => socket.off('connect', readAvailability);
+  }, []);
+
+  const toggleCallAvailability = (available) => {
+    const socket = connectSocket();
+    setAvailabilitySaving(true);
+    socket.timeout(7000).emit('set-call-availability', { available }, (error, result) => {
+      if (!error && result?.ok) setCallAvailable(result.available);
+      else socket.timeout(7000).emit('check-call-availability', (readError, snapshot) => {
+        if (!readError && typeof snapshot?.available === 'boolean') setCallAvailable(snapshot.available);
+      });
+      setAvailabilitySaving(false);
+    });
+  };
 
   const loadDashboardData = useCallback(async () => {
     const [profileResult, statsResult, appointmentsResult, studentsResult] = await Promise.allSettled([
@@ -350,6 +376,18 @@ const DashboardScreen = ({ navigation }) => {
             <View style={styles.availabilityCopy}>
               <Text style={[styles.availabilityTitle, compact && styles.availabilityTitleCompact]}>Availability</Text>
               <Text style={[styles.availabilitySub, compact && styles.availabilitySubCompact]}>Manage your office hours and open slots.</Text>
+              <View style={styles.callAvailabilityRow}>
+                <View style={[styles.callAvailabilityDot, callAvailable && styles.callAvailabilityDotOn]} />
+                <Text style={styles.callAvailabilityText}>{callAvailable ? 'Available for video calls' : 'Not available for video calls'}</Text>
+                <Switch
+                  value={callAvailable}
+                  onValueChange={toggleCallAvailability}
+                  disabled={availabilitySaving}
+                  trackColor={{ false: '#D7DCE2', true: '#A8D7B9' }}
+                  thumbColor={callAvailable ? C.green : '#8B929B'}
+                  accessibilityLabel="Toggle availability for video calls"
+                />
+              </View>
             </View>
           </View>
           <TouchableOpacity
@@ -496,6 +534,10 @@ const styles = StyleSheet.create({
   availabilityIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.peachSoft, alignItems: 'center', justifyContent: 'center' },
   availabilityIconCompact: { width: 52, height: 52, borderRadius: 26 },
   availabilityCopy: { flex: 1 },
+  callAvailabilityRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  callAvailabilityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#A4AAB2' },
+  callAvailabilityDotOn: { backgroundColor: C.green },
+  callAvailabilityText: { flex: 1, color: C.muted, fontSize: 11, fontWeight: '700' },
   availabilityTitle: { color: C.ink, fontSize: 19, fontWeight: '800', marginBottom: 3 },
   availabilityTitleCompact: { fontSize: 17 },
   availabilitySub: { color: C.muted, fontSize: 12, lineHeight: 17 },

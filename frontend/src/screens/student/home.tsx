@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -9,8 +9,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { studentService } from '../../services/studentService';
 
 const CORAL = '#EF806B';
 const CREAM = '#FFF9F3';
@@ -286,10 +287,50 @@ export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const firstName = user?.firstName || 'Student';
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [counselorCount, setCounselorCount] = useState<number | null>(null);
+  const [resourceCount, setResourceCount] = useState<number | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(14)).current;
   const logoScale = useRef(new Animated.Value(0.92)).current;
   const characterFloat = useRef(new Animated.Value(0)).current;
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      const loadDashboardData = async () => {
+        const results = await Promise.allSettled([
+          studentService.getAppointments(),
+          studentService.getCounselors(),
+          studentService.getResources(),
+        ]);
+        if (!active) return;
+
+        const [appointmentResult, counselorResult, resourceResult] = results;
+        if (appointmentResult.status === 'fulfilled') {
+          const response = appointmentResult.value;
+          setAppointments(Array.isArray(response?.data) ? response.data : []);
+        }
+        if (counselorResult.status === 'fulfilled') {
+          const response = counselorResult.value;
+          const counselors = Array.isArray(response?.data) ? response.data : [];
+          setCounselorCount(counselors.length);
+        }
+        if (resourceResult.status === 'fulfilled') {
+          const response = resourceResult.value;
+          const resources = Array.isArray(response?.data) ? response.data : [];
+          setResourceCount(resources.length);
+        }
+      };
+
+      loadDashboardData();
+      return () => { active = false; };
+    }, []),
+  );
+
+  const upcomingAppointments = appointments.filter((appointment) =>
+    ['upcoming', 'confirmed'].includes(String(appointment.status || '').toLowerCase()),
+  );
 
   useEffect(() => {
     Animated.parallel([
@@ -544,7 +585,9 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.quickDescription}>
-                Get personal support
+                {counselorCount === null
+                  ? 'Get personal support'
+                  : `${counselorCount} counselor${counselorCount === 1 ? '' : 's'} available`}
               </Text>
 
               <View style={styles.smallArrow}>
@@ -602,7 +645,11 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.appointmentDescription}>
-                View upcoming counseling sessions
+                {upcomingAppointments.length > 0
+                  ? `${upcomingAppointments.length} upcoming session${upcomingAppointments.length === 1 ? '' : 's'}${upcomingAppointments[0].counselorName ? ` · ${upcomingAppointments[0].counselorName}` : ''}`
+                  : appointments.length > 0
+                    ? 'No upcoming sessions · View appointment history'
+                    : 'View upcoming counseling sessions'}
               </Text>
 
             </View>
@@ -642,7 +689,9 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.resourceDescription}>
-                Explore helpful resources for your wellbeing
+                {resourceCount === null
+                  ? 'Explore helpful resources for your wellbeing'
+                  : `${resourceCount} helpful resources for your wellbeing`}
               </Text>
 
             </View>

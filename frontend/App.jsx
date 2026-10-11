@@ -22,8 +22,8 @@ function AppInner() {
     <>
       <StatusBar style="auto" />
       <AuthNavigator />
-      {/* Global incoming call overlay — only active for logged-in students */}
-      {user?.role === 'student' && <IncomingCallOverlay />}
+      {/* Global incoming call overlay for students and counselors. */}
+      {['student', 'counselor'].includes(user?.role) && <IncomingCallOverlay />}
     </>
   );
 }

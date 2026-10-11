@@ -36,12 +36,15 @@ import Constants from 'expo-constants';
 // 2. Native apps use EXPO_PUBLIC_API_URL when provided.
 // 3. Otherwise, native apps use the Expo host IP or a local-network fallback.
 const resolveApiBaseUrl = () => {
-  if (Platform.OS === 'web') {
-    return 'http://127.0.0.1:8082/api';
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    const configuredUrl = process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
+    return configuredUrl.endsWith('/api') ? configuredUrl : `${configuredUrl}/api`;
   }
 
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+  if (Platform.OS === 'web') {
+    const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${protocol}//${host}:8082/api`;
   }
 
   // Detect IP from Expo Go Metro connection

@@ -22,10 +22,19 @@ import ManagementRegisterScreen from '../screens/auth/ManagementRegisterScreen';
 // ── Counselor root-level screens (reachable from any counselor tab) ───────
 import AvailabilityScreen from '../screens/counselor/AvailabilityScreen';
 import VideoSessionScreen from '../screens/counselor/VideoSessionScreen';
+import VideoCallScreen from '../screens/shared/VideoCallScreen';
 import { USER_ROLES } from '../utils/constants';
 
 const Stack = createNativeStackNavigator();
 const CounselorRootStack = createNativeStackNavigator();
+const StudentRootStack = createNativeStackNavigator();
+
+const StudentRootNavigator = () => (
+  <StudentRootStack.Navigator screenOptions={{ headerShown: false }}>
+    <StudentRootStack.Screen name="StudentTabs" component={StudentNavigator} />
+    <StudentRootStack.Screen name="VideoCall" component={VideoCallScreen} />
+  </StudentRootStack.Navigator>
+);
 
 /**
  * Wraps the counselor tab navigator in a root stack so that
@@ -36,6 +45,7 @@ const CounselorRootNavigator = () => (
     <CounselorRootStack.Screen name="CounselorTabs"  component={CounselorNavigator} />
     <CounselorRootStack.Screen name="Availability"   component={AvailabilityScreen} />
     <CounselorRootStack.Screen name="VideoSession"   component={VideoSessionScreen} />
+    <CounselorRootStack.Screen name="VideoCall"       component={VideoCallScreen} />
   </CounselorRootStack.Navigator>
 );
 
@@ -49,7 +59,7 @@ const AuthNavigator = () => {
 
   if (isAuthenticated) {
     switch (user?.role) {
-      case USER_ROLES.STUDENT:    return <StudentNavigator />;
+      case USER_ROLES.STUDENT:    return <StudentRootNavigator />;
       case USER_ROLES.COUNSELOR:  return <CounselorRootNavigator />;
       case USER_ROLES.WELFARE:    return <WelfareNavigator />;
       case USER_ROLES.MANAGEMENT: return <ManagementNavigator />;

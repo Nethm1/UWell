@@ -5,12 +5,20 @@
  * between student and counselor.
  */
 import { io, Socket } from 'socket.io-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 // Derive the socket server base URL using the same IP-detection logic as api.js
 const resolveSocketUrl = (): string => {
-  if (Platform.OS === 'web') return 'http://127.0.0.1:8082';
+  const configuredUrl = process.env.EXPO_PUBLIC_SOCKET_URL || process.env.EXPO_PUBLIC_API_URL;
+  if (configuredUrl) return configuredUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+
+  if (Platform.OS === 'web') {
+    const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${protocol}//${host}:8082`;
+  }
 
   if (process.env.EXPO_PUBLIC_API_URL) {
     // Strip /api suffix if present
@@ -31,13 +39,18 @@ export const SOCKET_URL = resolveSocketUrl();
 let _socket: Socket | null = null;
 
 export const getSocket = (): Socket => {
-  if (!_socket || !_socket.connected) {
+  if (!_socket) {
     _socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       autoConnect: false,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1500,
+      auth: (callback) => {
+        AsyncStorage.getItem('token')
+          .then((token) => callback({ token }))
+          .catch(() => callback({}));
+      },
     });
   }
   return _socket;
