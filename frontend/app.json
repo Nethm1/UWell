@@ -12,14 +12,25 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.uwell.app"
+      "bundleIdentifier": "com.uwell.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "UWell uses your camera for video counseling sessions.",
+        "NSMicrophoneUsageDescription": "UWell uses your microphone for video counseling sessions."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/icons/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.uwell.app"
+      "package": "com.uwell.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "favicon": "./src/assets/icons/favicon.png"

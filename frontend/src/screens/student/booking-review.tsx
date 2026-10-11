@@ -125,11 +125,25 @@ export default function BookingReviewScreen() {
         sessionType: sessionTypeStr,
         notes: notesStr,
       });
+
+      // Fetch counselor phone so the confirmation screen can offer "Join Now"
+      let counselorPhone = '';
+      if (counselorId) {
+        try {
+          const cRes = await studentService.getCounselorById(String(counselorId));
+          const rawPhone = cRes?.data?.phone || cRes?.phone || '';
+          counselorPhone = rawPhone.replace(/[^\d+]/g, '');
+        } catch { /* non-blocking */ }
+      }
+
       navigation.navigate('BookingConfirmed', {
-        appointmentId: res?.data?._id || '',
-        date: dateStr,
-        time: timeStr,
-        sessionType: sessionTypeStr,
+        appointmentId:          res?.data?._id || '',
+        date:                   dateStr,
+        time:                   timeStr,
+        sessionType:            sessionTypeStr,
+        counselorName:          counselorName || 'Counselor',
+        counselorSpecialization:'Student Counselling',
+        counselorPhone,
       });
     } catch (err: any) {
       Alert.alert(

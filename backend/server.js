@@ -1,8 +1,10 @@
+﻿const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const connectDB = require('./src/config/db');
+const { Server: SocketServer } = require('socket.io');
 
 // Always load this backend's environment, including when npm is run from the
 // repository root rather than from the backend directory.
@@ -19,6 +21,118 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 const app = express();
+const httpServer = http.createServer(app);
+
+// ─── Socket.io — Video Session Signaling ─────────────────────────────────────
+const io = new SocketServer(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL || '*',
+    methods: ['GET', 'POST'],
+  },
+  transports: ['websocket', 'polling'],
+});
+
+// Track which sockets are in which room
+const roomParticipants = new Map(); // roomId → Set<socketId>
+
+io.on('connection', (socket) => {
+  console.log(`[Socket] connected: ${socket.id}`);
+
+  // ── join-room ──────────────────────────────────────────────────────────────
+  // payload: { roomId, userName, role ('student' | 'counselor') }
+  socket.on('join-room', ({ roomId, userName, role }) => {
+    if (!roomId) return;
+
+    socket.join(roomId);
+    socket.data.roomId   = roomId;
+    socket.data.userName = userName || 'Unknown';
+    socket.data.role     = role     || 'student';
+
+    if (!roomParticipants.has(roomId)) roomParticipants.set(roomId, new Set());
+    roomParticipants.get(roomId).add(socket.id);
+
+    const count = roomParticipants.get(roomId).size;
+    console.log(`[Socket] ${socket.id} (${role}) joined room ${roomId}. Total: ${count}`);
+
+    // Tell this socket how many others are already in the room
+    socket.emit('room-joined', { roomId, participantCount: count });
+
+    // Tell everyone else that a new participant arrived
+    socket.to(roomId).emit('peer-joined', {
+      socketId: socket.id,
+      userName: socket.data.userName,
+      role:     socket.data.role,
+    });
+  });
+
+  // ── leave-room ─────────────────────────────────────────────────────────────
+  socket.on('leave-room', ({ roomId }) => {
+    _leaveRoom(socket, roomId);
+  });
+
+  // ── WebRTC signaling relay ─────────────────────────────────────────────────
+  // Forward offer/answer/ICE candidate to everyone else in the room
+  socket.on('rtc-offer',     (payload) => socket.to(payload.roomId).emit('rtc-offer',     { ...payload, from: socket.id }));
+  socket.on('rtc-answer',    (payload) => socket.to(payload.roomId).emit('rtc-answer',    { ...payload, from: socket.id }));
+  socket.on('rtc-ice',       (payload) => socket.to(payload.roomId).emit('rtc-ice',       { ...payload, from: socket.id }));
+
+  // ── user registration ──────────────────────────────────────────────────────
+  socket.on('register-user', ({ userId, role }) => {
+    if (!userId) return;
+    socket.data.userId = userId;
+    socket.data.role   = role || 'student';
+    socket.join('user:' + userId);
+    console.log('[Socket] registered user ' + userId + ' (' + role + ') -> socket ' + socket.id);
+  });
+
+  // ── call-invite: Counselor -> Student ──────────────────────────────────────
+  socket.on('call-invite', (payload) => {
+    const { studentId } = payload;
+    if (!studentId) return;
+    console.log('[Socket] call-invite from ' + socket.id + ' -> user:' + studentId);
+    io.to('user:' + studentId).emit('call-invite', Object.assign({}, payload, { from: socket.id }));
+  });
+
+  // ── call-accepted: Student -> Counselor ────────────────────────────────────
+  socket.on('call-accepted', (payload) => {
+    const { counselorId } = payload;
+    if (!counselorId) return;
+    console.log('[Socket] call-accepted from ' + socket.id + ' -> user:' + counselorId);
+    io.to('user:' + counselorId).emit('call-accepted', Object.assign({}, payload, { from: socket.id }));
+  });
+
+  // ── call-declined: Student -> Counselor ────────────────────────────────────
+  socket.on('call-declined', (payload) => {
+    const { counselorId } = payload;
+    if (!counselorId) return;
+    console.log('[Socket] call-declined from ' + socket.id + ' -> user:' + counselorId);
+    io.to('user:' + counselorId).emit('call-declined', Object.assign({}, payload, { from: socket.id }));
+  });
+  // ── call-control signals ───────────────────────────────────────────────────
+  // Forward mute/video toggle/end so the other side's UI updates
+  socket.on('peer-muted',       (p) => socket.to(p.roomId).emit('peer-muted',       { ...p, from: socket.id }));
+  socket.on('peer-video-off',   (p) => socket.to(p.roomId).emit('peer-video-off',   { ...p, from: socket.id }));
+  socket.on('peer-video-on',    (p) => socket.to(p.roomId).emit('peer-video-on',    { ...p, from: socket.id }));
+  socket.on('session-ended',    (p) => socket.to(p.roomId).emit('session-ended',    { from: socket.id }));
+
+  // ── disconnect cleanup ─────────────────────────────────────────────────────
+  socket.on('disconnect', () => {
+    const roomId = socket.data.roomId;
+    if (roomId) _leaveRoom(socket, roomId);
+    console.log(`[Socket] disconnected: ${socket.id}`);
+  });
+});
+
+function _leaveRoom(socket, roomId) {
+  socket.leave(roomId);
+  const set = roomParticipants.get(roomId);
+  if (set) {
+    set.delete(socket.id);
+    if (set.size === 0) roomParticipants.delete(roomId);
+  }
+  socket.to(roomId).emit('peer-left', { socketId: socket.id, userName: socket.data.userName });
+  console.log(`[Socket] ${socket.id} left room ${roomId}`);
+}
 
 
 app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
@@ -195,12 +309,16 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
 });
 
-const PORT = parseInt(process.env.PORT, 10) || 5000;
+const PORT     = parseInt(process.env.PORT, 10)     || 5000;
 const ALT_PORT = parseInt(process.env.ALT_PORT, 10) || 8082;
 
+// ── listen helper ─────────────────────────────────────────────────────────────
+// httpServer owns socket.io and listens on ALT_PORT (mobile-facing).
+// PORT gets a separate plain server via app.listen().
 function listen(port, label) {
   return new Promise((resolve, reject) => {
-    const server = app.listen(port, '0.0.0.0');
+    // Attach socket.io to ALT_PORT; everything else uses app directly.
+    const server = (port === ALT_PORT) ? httpServer.listen(port, '0.0.0.0') : app.listen(port, '0.0.0.0');
 
     server.once('listening', () => {
       console.log(`✅ ${label} listening on http://0.0.0.0:${port}`);
@@ -230,6 +348,7 @@ async function startServers() {
     console.log('   Auth   → POST /api/auth/student/register');
     console.log('            POST /api/auth/student/login');
     console.log('   Student→ GET/PUT /api/student/profile');
+    console.log('   Socket → ws://0.0.0.0:' + PORT + ' (video signaling)');
   } catch (error) {
     console.error('❌ Backend startup failed:', error.message);
     process.exit(1);

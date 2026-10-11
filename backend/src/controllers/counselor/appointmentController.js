@@ -4,7 +4,7 @@ const Appointment = require('../../models/student/Appointment');
 const { counselorKey } = require('./_scope');
 
 const STUDENT_STATUS_BY_COUNSELOR_STATUS = {
-  confirmed: 'upcoming',
+  confirmed: 'confirmed',  // Changed from 'upcoming' to 'confirmed'
   completed: 'completed',
   cancelled: 'cancelled',
 };

@@ -2,6 +2,7 @@ const Appointment = require('../../models/student/Appointment');
 const Student = require('../../models/student/Student');
 const CounselorAppointment = require('../../models/counselor/CounselorAppointment');
 const CounselorStudent = require('../../models/counselor/CounselorStudent');
+const Counselor = require('../../models/counselor/Counselor');
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CREATE  POST /api/student/appointments
@@ -75,6 +76,17 @@ exports.createAppointment = async (req, res) => {
 
       const mirrorId = `stu-appt-${appointment._id}`;
 
+      // Look up counselor's actual office location for In Person appointments
+      let officeLocation = 'Online Session';
+      if (sessionType === 'In Person' && counselorId) {
+        try {
+          const counselorDoc = await Counselor.findById(counselorId).select('officeLocation').lean();
+          officeLocation = counselorDoc?.officeLocation || 'In-Person Session';
+        } catch {
+          officeLocation = 'In-Person Session';
+        }
+      }
+
       await CounselorAppointment.findOneAndUpdate(
         { _id: mirrorId },
         {
@@ -90,7 +102,7 @@ exports.createAppointment = async (req, res) => {
             sessionType:       sessionType || 'Online',
             date,
             time,
-            location:          sessionType === 'In Person' ? 'In-Person Room 304' : 'Online Session',
+            location:          officeLocation,
             status:            'Pending',
             notes:             notes || '',
             avatarInitials:    initials,

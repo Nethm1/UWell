@@ -14,17 +14,30 @@ import ProfileScreen from '../screens/counselor/ProfileScreen';
 import EditProfileScreen from '../screens/counselor/EditProfileScreen';
 import ClinicalFocusAreasScreen from '../screens/counselor/ClinicalFocusAreasScreen';
 import FocusAreaDetailScreen from '../screens/counselor/FocusAreaDetailScreen';
+import VideoSessionScreen from '../screens/counselor/VideoSessionScreen';
+import VideoCallScreen from '../screens/shared/VideoCallScreen';
 import { colors } from '../theme';
 
 const Tab = createBottomTabNavigator();
+const AppointmentsStack = createNativeStackNavigator();
 const StudentsStack = createNativeStackNavigator();
 const MessagesStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
+
+const AppointmentsStackScreen = () => (
+  <AppointmentsStack.Navigator screenOptions={{ headerShown: false }}>
+    <AppointmentsStack.Screen name="AppointmentsList" component={AppointmentsScreen} />
+    <AppointmentsStack.Screen name="VideoSession" component={VideoSessionScreen} />
+    <AppointmentsStack.Screen name="VideoCall" component={VideoCallScreen} />
+  </AppointmentsStack.Navigator>
+);
 
 const StudentsStackScreen = () => (
   <StudentsStack.Navigator screenOptions={{ headerShown: false }}>
     <StudentsStack.Screen name="StudentList" component={StudentListScreen} />
     <StudentsStack.Screen name="StudentSession" component={StudentSessionScreen} />
+    <StudentsStack.Screen name="VideoSession" component={VideoSessionScreen} />
+    <StudentsStack.Screen name="VideoCall" component={VideoCallScreen} />
   </StudentsStack.Navigator>
 );
 
@@ -99,7 +112,7 @@ const CounselorNavigator = () => {
         <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: 'Home' }} />
         <Tab.Screen
           name="Appointments"
-          component={AppointmentsScreen}
+          component={AppointmentsStackScreen}
           options={{ tabBarBadge: undefined }}
         />
         <Tab.Screen name="Students" component={StudentsStackScreen} />

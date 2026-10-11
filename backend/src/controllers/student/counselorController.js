@@ -68,6 +68,8 @@ exports.getCounselorById = async (req, res) => {
       status: 1,
       profileImage: 1,
       bio: 1,
+      phone: 1,
+      email: 1,
     };
 
     // Try approved first, fall back to any active counselor with that id
@@ -99,6 +101,8 @@ exports.getCounselorById = async (req, res) => {
         avatarInitials: `${(counselor.firstName || '')[0]}${(counselor.lastName || '')[0]}`.toUpperCase(),
         profileImage:   counselor.profileImage || '',
         bio:            counselor.bio || '',
+        phone:          counselor.phone || '',
+        email:          counselor.email || '',
       },
     });
   } catch (error) {

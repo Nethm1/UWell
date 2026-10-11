@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { counselorService } from '../../services/counselorService';
 
 const StudentSessionScreen = ({ route, navigation }) => {
   const studentId = route?.params?.studentId || 'stu-1';
+  const appointment = route?.params?.appointment || null;
   const [student, setStudent] = useState(null);
   const [sessionNotes, setSessionNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -81,7 +82,21 @@ const StudentSessionScreen = ({ route, navigation }) => {
   const studentPhone = (student.phone || '').replace(/[^\d+]/g, '');
   const hasPhone = studentPhone.length > 0;
 
+  const isOnlineSession = appointment?.sessionType === 'Online';
+
   const handleStartCall = () => {
+    if (isOnlineSession) {
+      // Navigate to real video session screen
+      navigation.navigate('VideoSession', {
+        appointmentId: appointment?.id || appointment?._id || '',
+        studentId:     student.sourceStudentId || student.id || student._id || '',
+        studentName:   student.name,
+        date:          appointment?.date || '',
+        time:          appointment?.time || '',
+      });
+      return;
+    }
+    // In Person or Phone — dial student directly
     if (!hasPhone) {
       Alert.alert(
         'No number on file',
@@ -138,12 +153,14 @@ const StudentSessionScreen = ({ route, navigation }) => {
         {/* Quick Action Buttons */}
         <View style={styles.actionButtonsRow}>
           <TouchableOpacity
-            style={[styles.primaryActionBtn, styles.videoBtn, !hasPhone && styles.disabledActionBtn]}
+            style={[styles.primaryActionBtn, styles.videoBtn, !isOnlineSession && !hasPhone && styles.disabledActionBtn]}
             onPress={handleStartCall}
-            disabled={!hasPhone}
-            accessibilityLabel="Start Call Session"
+            disabled={!isOnlineSession && !hasPhone}
+            accessibilityLabel={isOnlineSession ? 'Start Video Session' : 'Start Call Session'}
           >
-            <Text style={[styles.videoBtnText, !hasPhone && styles.disabledActionBtnText]}>📞 Start Call Session</Text>
+            <Text style={[styles.videoBtnText, !isOnlineSession && !hasPhone && styles.disabledActionBtnText]}>
+              {isOnlineSession ? '🎥 Start Video Session' : '📞 Start Call Session'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -158,7 +175,7 @@ const StudentSessionScreen = ({ route, navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {!hasPhone && (
+        {!isOnlineSession && !hasPhone && (
           <Text style={styles.noPhoneText}>
             No phone number on file for this student.
           </Text>

@@ -506,7 +506,7 @@ export default function MoodCheckInScreen() {
     // Save to backend after navigating — useFocusEffect reloads history on return
     try {
       await studentService.createMood(selectedMood);
-    } catch (e) {
+    } catch (e: any) {
       console.log('[Mood] Backend save failed, continuing offline:', e?.message);
     }
   };

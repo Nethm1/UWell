@@ -19,24 +19,27 @@ export default function CounselorSearchScreen() {
 
   const [counselors, setCounselors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    let active = true;
+  const fetchCounselors = () => {
+    setLoading(true);
+    setLoadError(false);
     studentService
       .getCounselors()
       .then((data: any) => {
         const list = Array.isArray(data) ? data : (data?.data || []);
-        if (active) setCounselors(list);
+        setCounselors(list);
+        if (list.length === 0) setLoadError(false); // empty is ok
       })
       .catch(() => {
-        if (active) setCounselors([]);
+        setCounselors([]);
+        setLoadError(true);
       })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchCounselors();
   }, []);
 
   const filters = useMemo(() => {
@@ -160,7 +163,22 @@ export default function CounselorSearchScreen() {
 
         {loading && (
           <View style={styles.loadingBox}>
-            <ActivityIndicator color="#EF806B" />
+            <ActivityIndicator color="#EF806B" size="large" />
+            <Text style={styles.loadingText}>Loading counselors…</Text>
+          </View>
+        )}
+
+        {/* Network / server error */}
+        {!loading && loadError && (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>📡</Text>
+            <Text style={styles.emptyTitle}>Could not load counselors</Text>
+            <Text style={styles.emptyText}>
+              Check your internet connection and make sure the server is running, then try again.
+            </Text>
+            <Pressable style={styles.resetButton} onPress={fetchCounselors}>
+              <Text style={styles.resetButtonText}>Retry</Text>
+            </Pressable>
           </View>
         )}
 
@@ -218,8 +236,8 @@ export default function CounselorSearchScreen() {
           </Pressable>
         ))}
 
-        {/* Empty State */}
-        {!loading && filteredCounselors.length === 0 && (
+        {/* Empty State — no search results (data loaded OK) */}
+        {!loading && !loadError && filteredCounselors.length === 0 && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyIcon}>🔍</Text>
 
@@ -436,6 +454,12 @@ const styles = StyleSheet.create({
   loadingBox: {
     paddingVertical: 40,
     alignItems: 'center',
+  },
+
+  loadingText: {
+    color: '#8A7770',
+    fontSize: 13,
+    marginTop: 12,
   },
 
   counselorInfo: {

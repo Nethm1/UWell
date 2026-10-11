@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
   FlatList,
+  Linking,
   Platform,
   StatusBar,
   StyleSheet,
@@ -83,6 +84,30 @@ const AppointmentsScreen = ({ navigation }) => {
     params: { studentId: item.studentId, studentName: item.studentName },
   });
 
+  // Navigate to real video session (registered in AppointmentsStack)
+  const handleStartVideo = (item) => {
+    navigation.navigate('VideoSession', {
+      appointmentId: item.id || item._id || '',
+      studentId:     item.studentId    || '',
+      studentName:   item.studentName  || 'Student',
+      date:          item.date         || '',
+      time:          item.time         || '',
+    });
+  };
+
+  // Open counselor's own office location in Google Maps so student can find them
+  const handleViewLocation = (item) => {
+    const loc = item.location || '';
+    if (!loc || loc === 'Online Session') {
+      Alert.alert('No location set', 'No physical location has been recorded for this appointment.');
+      return;
+    }
+    const url = `https://maps.google.com/?q=${encodeURIComponent(loc)}`;
+    Linking.openURL(url).catch(() =>
+      Alert.alert('Cannot open maps', 'Your device could not open the maps application.')
+    );
+  };
+
   const today = startOfDay(new Date());
   const isPast = (appointment) => {
     if (['Completed', 'Cancelled'].includes(appointment.status)) return true;
@@ -151,14 +176,39 @@ const AppointmentsScreen = ({ navigation }) => {
             </View>
           )}
           {item.status === 'Confirmed' && (
-            <View style={styles.actionsRow}>
-              <TouchableOpacity style={[styles.actionBtn, styles.messageBtn]} onPress={() => openChat(item)} accessibilityLabel={`Message ${item.studentName}`}>
-                <Ionicons name="chatbubble-ellipses-outline" size={15} color="#3973B9" /><Text style={styles.messageBtnText}>Message student</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.completeBtn]} onPress={() => updateStatus(item, 'Completed')} disabled={!!updatingId} accessibilityLabel="Mark session complete">
-                {updatingId === id ? <ActivityIndicator size="small" color="#177957" /> : <><Feather name="check-circle" size={14} color="#177957" /><Text style={styles.completeBtnText}>Complete</Text></>}
-              </TouchableOpacity>
-            </View>
+            <>
+              {/* ── Video session (Online) or location link (In Person) ── */}
+              {item.sessionType === 'Online' && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.videoSessionBtn, { marginTop: 8 }]}
+                  onPress={() => handleStartVideo(item)}
+                  accessibilityLabel="Start video session"
+                >
+                  <Ionicons name="videocam-outline" size={15} color="#fff" />
+                  <Text style={styles.videoSessionBtnText}>Start Video Session</Text>
+                </TouchableOpacity>
+              )}
+              {item.sessionType === 'In Person' && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.locationBtn, { marginTop: 8 }]}
+                  onPress={() => handleViewLocation(item)}
+                  accessibilityLabel="View meeting location"
+                >
+                  <Feather name="map-pin" size={14} color="#5A3E8A" />
+                  <Text style={styles.locationBtnText}>
+                    {item.location && item.location !== 'Online Session' ? `📍 ${item.location}` : '📍 View Location'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <View style={styles.actionsRow}>
+                <TouchableOpacity style={[styles.actionBtn, styles.messageBtn]} onPress={() => openChat(item)} accessibilityLabel={`Message ${item.studentName}`}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={15} color="#3973B9" /><Text style={styles.messageBtnText}>Message student</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.completeBtn]} onPress={() => updateStatus(item, 'Completed')} disabled={!!updatingId} accessibilityLabel="Mark session complete">
+                  {updatingId === id ? <ActivityIndicator size="small" color="#177957" /> : <><Feather name="check-circle" size={14} color="#177957" /><Text style={styles.completeBtnText}>Complete</Text></>}
+                </TouchableOpacity>
+              </View>
+            </>
           )}
         </View>
       </View>
@@ -258,6 +308,10 @@ const styles = StyleSheet.create({
   messageBtnText: { color: '#3973B9', fontSize: 11, fontWeight: '800' },
   completeBtn: { backgroundColor: '#DDF5EC' },
   completeBtnText: { color: '#177957', fontSize: 11, fontWeight: '800' },
+  videoSessionBtn: { backgroundColor: '#3973B9', marginBottom: 0 },
+  videoSessionBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  locationBtn: { backgroundColor: '#F0EBFF', borderWidth: 1, borderColor: '#D4C5F5' },
+  locationBtnText: { color: '#5A3E8A', fontSize: 11, fontWeight: '800', flexShrink: 1 },
   emptyCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#E6EBF1', padding: 24, marginTop: 8 },
   emptyIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#EAF2FC', alignItems: 'center', justifyContent: 'center', marginBottom: 11 },
   emptyTitle: { color: '#26394D', fontSize: 14, fontWeight: '800', textAlign: 'center' },
