@@ -8,6 +8,7 @@ import ResourcesScreen from '../screens/student/wellness-resources';
 import ResourceDetailsScreen from '../screens/student/resource-details';
 import CounselorListScreen from '../screens/student/counselor-search';
 import CounselorProfileScreen from '../screens/student/counselor-details';
+import StudentChatScreen from '../screens/counselor/StudentChatScreen';
 import AvailabilityScreen from '../screens/student/availability';
 import BookAppointmentScreen from '../screens/student/book-appointment';
 import ReviewBookingScreen from '../screens/student/booking-review';
@@ -23,6 +24,8 @@ import PrivacyInformationScreen from '../screens/student/privacy-information';
 import MentalHealthTipsScreen from '../screens/student/mental-health-tips';
 import WellbeingCheckScreen from '../screens/student/wellbeing-check';
 import WellbeingRecommendationScreen from '../screens/student/wellbeing-recommendation';
+import VideoSessionScreen from '../screens/student/video-session';
+import VideoCallScreen from '../screens/shared/VideoCallScreen';
 import { tabScreenOptions } from './TabHelpers';
 
 const Tab = createBottomTabNavigator();
@@ -54,9 +57,12 @@ const CounselorsStackScreen = () => (
   <CounselorsStack.Navigator screenOptions={{ headerShown: false }}>
     <CounselorsStack.Screen name="CounselorList" component={CounselorListScreen} />
     <CounselorsStack.Screen name="CounselorProfile" component={CounselorProfileScreen} />
+    <CounselorsStack.Screen name="StudentChat" component={StudentChatScreen} />
     <CounselorsStack.Screen name="Availability" component={AvailabilityScreen} />
     <CounselorsStack.Screen name="BookAppointment" component={BookAppointmentScreen} />
     <CounselorsStack.Screen name="AppointmentDetails" component={AppointmentDetailsScreen} />
+    <CounselorsStack.Screen name="VideoSession" component={VideoSessionScreen} />
+    <CounselorsStack.Screen name="VideoCall" component={VideoCallScreen} />
     <CounselorsStack.Screen name="ReviewBooking" component={ReviewBookingScreen} />
     <CounselorsStack.Screen name="BookingConfirmed" component={BookingConfirmedScreen} />
   </CounselorsStack.Navigator>
@@ -66,6 +72,9 @@ const SessionsStackScreen = () => (
   <SessionsStack.Navigator screenOptions={{ headerShown: false }}>
     <SessionsStack.Screen name="MySessions" component={MySessionsScreen} />
     <SessionsStack.Screen name="AppointmentDetails" component={AppointmentDetailsScreen} />
+    <SessionsStack.Screen name="VideoSession" component={VideoSessionScreen} />
+    <SessionsStack.Screen name="VideoCall" component={VideoCallScreen} />
+    <SessionsStack.Screen name="StudentChat" component={StudentChatScreen} />
     <SessionsStack.Screen name="Availability" component={AvailabilityScreen} />
     <SessionsStack.Screen name="BookAppointment" component={BookAppointmentScreen} />
     <SessionsStack.Screen name="ReviewBooking" component={ReviewBookingScreen} />

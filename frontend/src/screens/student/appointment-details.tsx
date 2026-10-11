@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable,
-  ScrollView, Alert, ActivityIndicator,
+  ScrollView, Alert, ActivityIndicator, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
@@ -96,6 +96,8 @@ export default function AppointmentDetailsScreen() {
   const [appointment, setAppointment] = useState<any>(null);
   const [loading, setLoading]         = useState(true);
   const [cancelling, setCancelling]   = useState(false);
+  const [counselorPhone, setCounselorPhone]       = useState<string>('');
+  const [counselorLocation, setCounselorLocation] = useState<string>('');
 
   useFocusEffect(
     React.useCallback(() => {
@@ -110,7 +112,19 @@ export default function AppointmentDetailsScreen() {
   const loadAppointment = async () => {
     try {
       const res = await studentService.getAppointmentById(appointmentId!);
-      setAppointment(res?.data);
+      const data = res?.data;
+      setAppointment(data);
+      // Fetch counselor phone and location for session actions
+      if (data?.counselorId) {
+        try {
+          const cRes = await studentService.getCounselorById(String(data.counselorId));
+          const phone = (cRes?.data?.phone || '').replace(/[^\d+]/g, '');
+          setCounselorPhone(phone);
+          setCounselorLocation(cRes?.data?.officeLocation || '');
+        } catch {
+          // unavailable — buttons show disabled state
+        }
+      }
     } catch {
       // use fallback
     } finally {
@@ -160,10 +174,36 @@ export default function AppointmentDetailsScreen() {
   const handleReschedule = () => {
     if (!appointmentId) return;
     navigation.navigate('Availability', {
-      counselorId: appointment?.counselorId || appointment?.counselor?._id || appointment?.counselor || 1,
+      counselorId: appt.counselorId || undefined,
       appointmentId,
-      counselorName: appointment?.counselorName || 'Dr. Sarah Perera',
+      counselorName: appt.counselorName || '',
     });
+  };
+
+  const handleJoinCall = async () => {
+    // Navigate to the real video session screen
+    navigation.navigate('VideoCall', {
+      appointmentId: appointmentId || '',
+      role:          'student',
+      displayName:   'Student',          // replaced by auth name in a full impl
+      counselorName: appt.counselorName  || 'Counselor',
+      date:          appt.date           || '',
+      time:          appt.time           || '',
+      sessionType:   'Online',
+    });
+  };
+
+  const handleViewLocation = () => {
+    if (!counselorLocation) {
+      Alert.alert('Location unavailable', 'The office location has not been set for this counselor.');
+      return;
+    }
+    // Open in Maps (Google Maps on Android, Apple Maps on iOS)
+    const query = encodeURIComponent(counselorLocation);
+    const url   = `https://maps.google.com/?q=${query}`;
+    Linking.openURL(url).catch(() =>
+      Alert.alert('Cannot open maps', 'Your device could not open the maps application.'),
+    );
   };
 
   if (loading) {
@@ -177,17 +217,19 @@ export default function AppointmentDetailsScreen() {
   }
 
   const appt = appointment || {
-    counselorName: 'Dr. Sarah Perera',
+    counselorName: '',
     counselorSpecialization: 'Student Counselling',
-    date: 'Mon, Oct 12',
-    time: '09:00 AM',
+    date: '',
+    time: '',
     sessionType: 'Online',
     status: 'upcoming',
     notes: '',
   };
 
-  const isUpcoming  = appt.status === 'upcoming';
-  const isCancelled = appt.status === 'cancelled';
+  const isUpcoming    = appt.status === 'upcoming';
+  const isConfirmed   = appt.status === 'confirmed';
+  const isCancelled   = appt.status === 'cancelled';
+  const isCompleted   = appt.status === 'completed';
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -205,24 +247,29 @@ export default function AppointmentDetailsScreen() {
         {/* ── Status Banner ── */}
         <View style={[styles.statusBanner,
           isCancelled  ? styles.bannerCancelled :
-          appt.status === 'completed' ? styles.bannerCompleted :
+          isCompleted  ? styles.bannerCompleted :
+          isConfirmed  ? styles.bannerConfirmed :
           styles.bannerUpcoming
         ]}>
           <View style={styles.statusIconWrap}>
             {isCancelled
               ? <XIcon color="#C94C4C" />
-              : <CheckIcon color="#4E9B5C" />
+              : isCompleted
+                ? <CheckIcon color="#4E9B5C" />
+                : <CheckIcon color="#4E9B5C" />
             }
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.statusTitle}>
               {isCancelled ? 'Appointment Cancelled'
-                : appt.status === 'completed' ? 'Session Completed'
+                : isCompleted ? 'Session Completed'
+                : isConfirmed ? 'Appointment Confirmed'
                 : 'Appointment Confirmed'}
             </Text>
             <Text style={styles.statusSub}>
               {isCancelled ? 'This appointment has been cancelled.'
-                : appt.status === 'completed' ? 'This session has been completed.'
+                : isCompleted ? 'This session has been completed.'
+                : isConfirmed ? 'Your counseling session is confirmed. Start video session with your counselor.'
                 : 'Your counseling session is confirmed.'}
             </Text>
           </View>
@@ -239,6 +286,46 @@ export default function AppointmentDetailsScreen() {
             <Text style={styles.counselorSpec}>{appt.counselorSpecialization}</Text>
           </View>
         </View>
+
+        {!!appt.counselorId && !isCancelled && (
+          <Pressable
+            style={({ pressed }) => [styles.messageCounselorBtn, pressed && { opacity: 0.82 }]}
+            onPress={() => navigation.navigate('StudentChat', {
+              counselorId: String(appt.counselorId),
+              counselorName: appt.counselorName,
+            })}
+          >
+            <Text style={styles.messageCounselorText}>Message Counselor</Text>
+          </Pressable>
+        )}
+
+        {/* ── Join Call Session — only for confirmed Online appointments ── */}
+        {isUpcoming && appt.sessionType === 'Online' && appt.status === 'confirmed' && !isCancelled && (
+          <Pressable
+            style={({ pressed }) => [styles.callBtn, pressed && { opacity: 0.85 }]}
+            onPress={handleJoinCall}
+          >
+            <Text style={styles.callBtnIcon}>🎥</Text>
+            <Text style={styles.callBtnText}>Start Video Session</Text>
+          </Pressable>
+        )}
+
+        {/* ── View Location — only for upcoming In Person appointments ── */}
+        {isUpcoming && appt.sessionType === 'In Person' && !isCancelled && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.locationBtn,
+              !counselorLocation && styles.locationBtnDisabled,
+              pressed && counselorLocation && { opacity: 0.85 },
+            ]}
+            onPress={handleViewLocation}
+          >
+            <Text style={styles.locationBtnIcon}>📍</Text>
+            <Text style={[styles.locationBtnText, !counselorLocation && styles.locationBtnTextDisabled]}>
+              {counselorLocation ? `View Location: ${counselorLocation}` : 'Location Not Available'}
+            </Text>
+          </Pressable>
+        )}
 
         {/* ── Details ── */}
         <Text style={styles.sectionTitle}>Appointment Details</Text>
@@ -340,6 +427,7 @@ const styles = StyleSheet.create({
 
   statusBanner:    { borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   bannerUpcoming:  { backgroundColor: '#EAF7EC' },
+  bannerConfirmed: { backgroundColor: '#EAF7EC' },
   bannerCancelled: { backgroundColor: '#FBE1DE' },
   bannerCompleted: { backgroundColor: '#EAF7EC' },
   statusIconWrap:  { width: 40, height: 40, borderRadius: 20, backgroundColor: WHITE, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
@@ -352,6 +440,46 @@ const styles = StyleSheet.create({
   avatarCircle:    { width: 52, height: 52, borderRadius: 26, backgroundColor: '#FFF1EC', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   counselorName:   { fontSize: 15, fontWeight: '700', color: DARK, marginBottom: 3 },
   counselorSpec:   { fontSize: 12, color: CORAL },
+  messageCounselorBtn: { height: 46, backgroundColor: '#FFF1EC', borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 10, borderWidth: 1, borderColor: '#F4CFC5' },
+  messageCounselorText: { fontSize: 13, fontWeight: '700', color: '#C85F4E' },
+
+  callBtn: {
+    height: 52,
+    backgroundColor: '#EF806B',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    shadowColor: '#EF806B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  callBtnIcon: { fontSize: 20 },
+  callBtnText: { fontSize: 15, fontWeight: '700', color: WHITE },
+
+  locationBtn: {
+    height: 52,
+    backgroundColor: '#EAF3FF',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#B8D4F0',
+  },
+  locationBtnDisabled: {
+    backgroundColor: '#F0EBE6',
+    borderColor: '#E3D8D2',
+  },
+  locationBtnIcon: { fontSize: 18 },
+  locationBtnText: { fontSize: 13, fontWeight: '700', color: '#2D6FA8', flexShrink: 1 },
+  locationBtnTextDisabled: { color: '#9A8982' },
 
   detailCard:      { backgroundColor: WHITE, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: '#F0E2DC' },
   detailRow:       { flexDirection: 'row', alignItems: 'center' },

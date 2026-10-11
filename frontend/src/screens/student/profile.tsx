@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -47,24 +48,29 @@ export default function ProfileScreen() {
   );
 
   const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Are you sure you want to log out?')) {
+        void logout();
+      }
+      return;
+    }
+
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: async () => {
-          if (logout) await logout();
-        },
+        onPress: () => { void logout(); },
       },
     ]);
   };
 
-  const fullName = user?.fullName || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Wasana');
-  const studentId = user?.studentId || 'STU20240001';
-  const email = user?.email || 'student@example.com';
-  const faculty = user?.faculty || 'Faculty of Computing';
-  const degree = user?.degreeProgram || 'Computer Science';
-  const year = user?.yearOfStudy || 'Year 1';
+  const fullName = user?.fullName || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Student');
+  const studentId = user?.studentId || '—';
+  const email = user?.email || '—';
+  const faculty = user?.faculty || '—';
+  const degree = user?.degreeProgram || '—';
+  const year = user?.yearOfStudy || '—';
   const phone = user?.phone || 'Not provided';
 
   return (

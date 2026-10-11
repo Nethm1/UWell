@@ -14,6 +14,7 @@ const counselorProfileSchema = new mongoose.Schema(
     officeLocation: { type: String, default: '' },
     email: { type: String, default: '' },
     avatarInitials: { type: String, default: 'EM' },
+    profileImage: { type: String, trim: true, default: '' },
     bio: { type: String, default: '' },
   },
   {
@@ -22,7 +23,7 @@ const counselorProfileSchema = new mongoose.Schema(
     toJSON: {
       virtuals: true,
       transform: (doc, ret) => {
-        delete ret._id;
+        ret.id = ret._id;   // expose string _id as `id` for consistency
         return ret;
       },
     },

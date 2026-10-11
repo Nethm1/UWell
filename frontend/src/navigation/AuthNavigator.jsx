@@ -42,9 +42,9 @@ const CounselorRootNavigator = () => (
 const AuthNavigator = () => {
   const { isAuthenticated, isLoading, user } = useAuth();
 
-  // Show splash+welcome while auth state is loading
+  // Keep the native Expo splash visible while stored auth state is restored.
   if (isLoading) {
-    return null; // or a minimal loading indicator
+    return null;
   }
 
   if (isAuthenticated) {
@@ -59,7 +59,7 @@ const AuthNavigator = () => {
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {/* Entry points — Splash+Welcome → Consent → Login */}
+      {/* Entry points — the Develop splash/welcome flow → Consent → Login */}
       <Stack.Screen name="Welcome"  component={SplashWelcomeScreen} />
       <Stack.Screen name="Consent"  component={ConsentScreen} />
       <Stack.Screen name="Login"    component={LoginScreen} />

@@ -1,7 +1,8 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DashboardScreen from '../screens/counselor/DashboardScreen';
 import AppointmentsScreen from '../screens/counselor/AppointmentsScreen';
@@ -13,17 +14,30 @@ import ProfileScreen from '../screens/counselor/ProfileScreen';
 import EditProfileScreen from '../screens/counselor/EditProfileScreen';
 import ClinicalFocusAreasScreen from '../screens/counselor/ClinicalFocusAreasScreen';
 import FocusAreaDetailScreen from '../screens/counselor/FocusAreaDetailScreen';
+import VideoSessionScreen from '../screens/counselor/VideoSessionScreen';
+import VideoCallScreen from '../screens/shared/VideoCallScreen';
 import { colors } from '../theme';
 
 const Tab = createBottomTabNavigator();
+const AppointmentsStack = createNativeStackNavigator();
 const StudentsStack = createNativeStackNavigator();
 const MessagesStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
+
+const AppointmentsStackScreen = () => (
+  <AppointmentsStack.Navigator screenOptions={{ headerShown: false }}>
+    <AppointmentsStack.Screen name="AppointmentsList" component={AppointmentsScreen} />
+    <AppointmentsStack.Screen name="VideoSession" component={VideoSessionScreen} />
+    <AppointmentsStack.Screen name="VideoCall" component={VideoCallScreen} />
+  </AppointmentsStack.Navigator>
+);
 
 const StudentsStackScreen = () => (
   <StudentsStack.Navigator screenOptions={{ headerShown: false }}>
     <StudentsStack.Screen name="StudentList" component={StudentListScreen} />
     <StudentsStack.Screen name="StudentSession" component={StudentSessionScreen} />
+    <StudentsStack.Screen name="VideoSession" component={VideoSessionScreen} />
+    <StudentsStack.Screen name="VideoCall" component={VideoCallScreen} />
   </StudentsStack.Navigator>
 );
 
@@ -47,7 +61,7 @@ type TabIconProps = { focused: boolean; color: string; size: number };
 
 const tabIconMap: Record<string, (props: TabIconProps) => React.ReactElement> = {
   Dashboard: ({ focused, color }) => (
-    <Ionicons name={focused ? 'bar-chart' : 'bar-chart-outline'} size={22} color={color} />
+    <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
   ),
   Appointments: ({ focused, color }) => (
     <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={22} color={color} />
@@ -64,6 +78,10 @@ const tabIconMap: Record<string, (props: TabIconProps) => React.ReactElement> = 
 };
 
 const CounselorNavigator = () => {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const narrowScreen = width < 360;
+
   return (
     <View style={styles.container}>
       <Tab.Navigator
@@ -79,21 +97,22 @@ const CounselorNavigator = () => {
             backgroundColor: colors.white,
             borderTopWidth: 1,
             borderTopColor: colors.border,
-            height: Platform.OS === 'ios' ? 82 : 64,
-            paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+            height: 58 + Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 6),
+            paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 6),
             paddingTop: 6,
           },
+          tabBarItemStyle: { paddingHorizontal: 0 },
           tabBarLabelStyle: {
-            fontSize: 10,
+            fontSize: narrowScreen ? 9 : 10,
             fontWeight: '500',
             marginTop: 2,
           },
         })}
       >
-        <Tab.Screen name="Dashboard" component={DashboardScreen} />
+        <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: 'Home' }} />
         <Tab.Screen
           name="Appointments"
-          component={AppointmentsScreen}
+          component={AppointmentsStackScreen}
           options={{ tabBarBadge: undefined }}
         />
         <Tab.Screen name="Students" component={StudentsStackScreen} />

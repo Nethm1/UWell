@@ -86,8 +86,8 @@ export default function MyAppointmentsScreen() {
     }, [])
   );
 
-  const upcoming = appointments.filter(a => a.status === 'upcoming');
-  const past     = appointments.filter(a => a.status !== 'upcoming');
+  const upcoming   = appointments.filter(a => a.status === 'upcoming' || a.status === 'confirmed');
+  const past       = appointments.filter(a => a.status !== 'upcoming' && a.status !== 'confirmed');
 
   const formatDay = (dateStr: string) => {
     // e.g. "Mon, Oct 12" → "12"
@@ -157,9 +157,11 @@ export default function MyAppointmentsScreen() {
                     </View>
                   </View>
                   <View style={styles.cardBody}>
-                    <View style={styles.statusPill}>
-                      <View style={styles.statusDot} />
-                      <Text style={styles.statusPillText}>Upcoming</Text>
+                    <View style={[styles.statusPill, appt.status === 'confirmed' ? styles.pillConfirmed : null]}>
+                      <View style={[styles.statusDot, appt.status === 'confirmed' ? styles.dotConfirmed : null]} />
+                      <Text style={[styles.statusPillText, appt.status === 'confirmed' ? styles.pillTextConfirmed : null]}>
+                        {appt.status === 'confirmed' ? 'Confirmed' : 'Upcoming'}
+                      </Text>
                     </View>
                     <Text style={styles.counselorName}>{appt.counselorName}</Text>
                     <Text style={styles.counselorSpec}>{appt.counselorSpecialization}</Text>
@@ -187,9 +189,10 @@ export default function MyAppointmentsScreen() {
               </View>
             ) : (
               past.map(appt => (
-                <View
+                <Pressable
                   key={appt._id}
-                  style={[styles.card, styles.cardPast]}
+                  style={({ pressed }) => [styles.card, styles.cardPast, pressed && { opacity: 0.75 }]}
+                  onPress={() => navigation.navigate('AppointmentDetails', { appointmentId: appt._id })}
                 >
                   <View style={styles.cardLeft}>
                     <View style={[styles.dateBox, styles.dateBoxPast]}>
@@ -210,7 +213,7 @@ export default function MyAppointmentsScreen() {
                       <Text style={styles.metaText}>{appt.time}</Text>
                     </View>
                   </View>
-                </View>
+                </Pressable>
               ))
             )}
 
@@ -265,6 +268,9 @@ const styles = StyleSheet.create({
   statusPill:      { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#E8F5EC', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 5 },
   statusDot:       { width: 5, height: 5, borderRadius: 3, backgroundColor: '#4E9B5C', marginRight: 5 },
   statusPillText:  { fontSize: 9.5, fontWeight: '700', color: '#4E9B5C' },
+  pillConfirmed:   { backgroundColor: '#EAF3FF' },
+  dotConfirmed:    { backgroundColor: '#3973B9' },
+  pillTextConfirmed: { color: '#3973B9', fontSize: 9.5, fontWeight: '700' },
   pillCancelled:   { backgroundColor: '#FBE1DE' },
   pillCompleted:   { backgroundColor: '#E8F5EC' },
   pillTextCancelled: { color: '#C94C4C', fontSize: 9.5, fontWeight: '700' },

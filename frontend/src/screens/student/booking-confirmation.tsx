@@ -15,8 +15,27 @@ export default function BookingConfirmationScreen() {
   const params = route.params as {
     counselorId?: string; date?: string; time?: string;
     sessionType?: string; notes?: string; appointmentId?: string;
+    counselorName?: string; counselorSpecialization?: string;
+    counselorPhone?: string;
   } || {};
-  const { counselorId, date, time, sessionType, notes, appointmentId } = params;
+  const {
+    date, time, sessionType, notes, appointmentId,
+    counselorName, counselorSpecialization, counselorPhone = '',
+  } = params;
+
+  const isOnline = sessionType === 'Online';
+
+  const handleJoinVideoNow = () => {
+    navigation.navigate('VideoCall', {
+      appointmentId: appointmentId || '',
+      role:          'student',
+      displayName:   'Student',
+      counselorName: counselorName || 'Counselor',
+      date:          date          || '',
+      time:          time          || '',
+      sessionType:   'Online',
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -59,9 +78,9 @@ export default function BookingConfirmationScreen() {
 
             <View style={styles.detailContent}>
               <Text style={styles.label}>Counselor</Text>
-              <Text style={styles.value}>Dr. Sarah Perera</Text>
+              <Text style={styles.value}>{counselorName || 'Counselor'}</Text>
               <Text style={styles.secondaryValue}>
-                Student Counselling
+                {counselorSpecialization || 'Student Counselling'}
               </Text>
             </View>
           </View>
@@ -103,7 +122,7 @@ export default function BookingConfirmationScreen() {
           {/* Session Type */}
           <View style={styles.detailRow}>
             <View style={styles.iconBox}>
-              <Text style={styles.icon}>💻</Text>
+              <Text style={styles.icon}>{isOnline ? '🎥' : '🏢'}</Text>
             </View>
 
             <View style={styles.detailContent}>
@@ -111,9 +130,30 @@ export default function BookingConfirmationScreen() {
               <Text style={styles.value}>
                 {String(sessionType || 'Online')}
               </Text>
+              {isOnline && (
+                <Text style={styles.onlineHint}>
+                  You can join the video session below
+                </Text>
+              )}
             </View>
           </View>
         </View>
+
+        {/* ── Join Video Now (Online only) ── */}
+        {isOnline && (
+          <Pressable
+            style={({ pressed }) => [styles.videoJoinBtn, pressed && { opacity: 0.85 }]}
+            onPress={handleJoinVideoNow}
+            accessibilityLabel="Join Video Session Now"
+          >
+            <Text style={styles.videoJoinIcon}>🎥</Text>
+            <View>
+              <Text style={styles.videoJoinTitle}>Join Video Session Now</Text>
+              <Text style={styles.videoJoinSub}>Connect directly with your counselor</Text>
+            </View>
+            <Text style={styles.videoJoinArrow}>›</Text>
+          </Pressable>
+        )}
 
         {/* Reminder */}
         <View style={styles.reminderCard}>
@@ -389,6 +429,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: '#806F69',
+  },
+
+  onlineHint: {
+    fontSize: 10,
+    color: '#3973B9',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+
+  // ── Video join banner ──────────────────────────────────────────────────────
+  videoJoinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A2E',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 15,
+    gap: 12,
+  },
+  videoJoinIcon: { fontSize: 28 },
+  videoJoinTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  videoJoinSub: {
+    color: '#A0C8FF',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  videoJoinArrow: {
+    color: '#A0C8FF',
+    fontSize: 26,
+    marginLeft: 'auto' as any,
   },
 
   primaryButton: {
