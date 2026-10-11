@@ -1,0 +1,46 @@
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../utils/constants';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+console.log('[UWell API] Base URL configured:', API_BASE_URL);
+
+api.interceptors.request.use(
+  async (config) => {
+    const token = await AsyncStorage.getItem('token');
+    console.log(`[UWell API Req] ${config.method?.toUpperCase()} ${config.url} | token: ${token ? token.substring(0, 15) + '...' : 'NONE'}`);
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    console.log('[UWell API Req Error]', error.message || error);
+    return Promise.reject(error);
+  }
+);
+
+api.interceptors.response.use(
+  (response) => {
+    console.log(`[UWell API Res] ${response.status} from ${response.config.url}`);
+    return response;
+  },
+  (error) => {
+    // Only console.log to avoid React Native LogBox banners on user screen
+    console.log(`[UWell API] ${error.config?.url} returned ${error.response?.status || 'Network Error'}:`, error.response?.data?.message || error.message);
+    if (error.response?.status === 401) {
+      AsyncStorage.removeItem('token');
+      AsyncStorage.removeItem('user');
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
