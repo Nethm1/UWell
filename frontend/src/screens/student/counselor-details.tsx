@@ -11,8 +11,10 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { studentService } from '../../services/studentService';
+import { connectSocket } from '../../services/socketService';
 
 type CounselorData = {
   _id?: string;
@@ -38,6 +40,7 @@ export default function CounselorDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<CounselorData | null>(null);
   const [error, setError] = useState(false);
+  const [counselorOnline, setCounselorOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
     // counselorId must be a valid ObjectId — never fall back to 'c1'
@@ -61,6 +64,33 @@ export default function CounselorDetailsScreen() {
     return () => { active = false; };
   }, [counselorId]);
 
+  useEffect(() => {
+    if (!counselorId) return undefined;
+    const socket = connectSocket();
+    const fallbackTimer = setTimeout(() => setCounselorOnline(false), 7000);
+    const checkAvailability = () => socket.emit('check-user-online', { userId: String(counselorId), role: 'counselor' }, (result: { online?: boolean }) => {
+      clearTimeout(fallbackTimer);
+      setCounselorOnline(!!result?.online);
+    });
+    const onDisconnect = () => {
+      clearTimeout(fallbackTimer);
+      setCounselorOnline(false);
+    };
+    const onAvailability = (data: { counselorId?: string; available?: boolean }) => {
+      if (String(data?.counselorId) === String(counselorId)) setCounselorOnline(!!data.available);
+    };
+    socket.on('connect', checkAvailability);
+    socket.on('disconnect', onDisconnect);
+    socket.on('counselor-call-availability', onAvailability);
+    if (socket.connected) checkAvailability();
+    return () => {
+      clearTimeout(fallbackTimer);
+      socket.off('connect', checkAvailability);
+      socket.off('disconnect', onDisconnect);
+      socket.off('counselor-call-availability', onAvailability);
+    };
+  }, [counselorId]);
+
   const handleViewAvailability = () => {
     navigation.navigate('Availability', {
       counselorId,
@@ -73,6 +103,13 @@ export default function CounselorDetailsScreen() {
   const handleMessageCounselor = () => {
     navigation.navigate('StudentChat', {
       counselorId,
+      counselorName: profile?.name || 'Counselor',
+    });
+  };
+
+  const handleVideoCounselor = () => {
+    navigation.navigate('CallRequest', {
+      counselorId: String(counselorId),
       counselorName: profile?.name || 'Counselor',
     });
   };
@@ -239,6 +276,28 @@ export default function CounselorDetailsScreen() {
         {/* ── Contact & Book Section ── */}
         <Text style={styles.sectionTitle}>Connect with Counselor</Text>
         <View style={styles.contactCard}>
+          <View style={styles.presenceRow}>
+            <View style={[styles.presenceDot, counselorOnline ? styles.presenceOnline : styles.presenceOffline]} />
+            <Text style={styles.presenceText}>
+              {counselorOnline === null ? 'Checking availability…' : counselorOnline ? 'Online now' : 'Offline right now'}
+            </Text>
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.contactRow, counselorOnline === false && styles.contactRowDisabled, pressed && counselorOnline !== false && { opacity: 0.82 }]}
+            onPress={handleVideoCounselor}
+            disabled={counselorOnline === false}
+            accessibilityLabel={counselorOnline ? 'Start video call with counselor' : 'Counselor is offline'}
+          >
+            <View style={[styles.contactIconBox, { backgroundColor: '#EBF6F0' }]}>
+              <Feather name="video" size={19} color="#25835B" />
+            </View>
+            <View style={styles.contactInfo}>
+              <Text style={[styles.contactTitle, counselorOnline === false && styles.disabledText]}>Video Call Counselor</Text>
+              <Text style={styles.contactSub}>{counselorOnline === false ? 'The counselor is offline; try messaging instead' : 'Start a live video counseling call'}</Text>
+            </View>
+            {counselorOnline && <Text style={styles.contactArrow}>›</Text>}
+          </Pressable>
+          <View style={styles.divider} />
           {/* Message */}
           <Pressable
             style={({ pressed }) => [styles.contactRow, pressed && { opacity: 0.82 }]}
@@ -460,6 +519,11 @@ const styles = StyleSheet.create({
     borderColor: '#F0E2DC',
     marginBottom: 20,
   },
+  presenceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 11, paddingBottom: 4 },
+  presenceDot: { width: 8, height: 8, borderRadius: 4, marginRight: 7 },
+  presenceOnline: { backgroundColor: '#2EAA68' },
+  presenceOffline: { backgroundColor: '#A3A3A3' },
+  presenceText: { color: '#748078', fontSize: 11, fontWeight: '600' },
   contactRow: {
     flexDirection: 'row',
     alignItems: 'center',

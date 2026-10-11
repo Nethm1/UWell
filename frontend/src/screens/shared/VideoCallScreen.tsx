@@ -1,11 +1,10 @@
 /**
  * VideoCallScreen — shared by both Student and Counselor.
  *
- * Embeds a Jitsi Meet room in a full-screen WebView so both parties get
- * real camera + microphone with no extra SDK or native modules required.
+ * Embeds Jitsi Meet in a WebView on iOS/Android and an iframe on web.
  *
- * Room name is deterministic:  uwell-<appointmentId>  (or a random ID as fallback)
- * Both sides navigate here with the same appointmentId → they land in the same room.
+ * The authenticated Socket.IO server issues a random room id when the invite is accepted.
+ * Both participants receive that id and join the same Jitsi room.
  *
  * Socket.io is used to:
  *   • Notify the peer that you have joined / left
@@ -19,14 +18,18 @@ import {
   TouchableOpacity,
   StatusBar,
   Alert,
+  Linking,
   Animated,
   Platform,
   ActivityIndicator,
+  PermissionsAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import WebView from 'react-native-webview';
-import { connectSocket, disconnectSocket } from '../../services/socketService';
+import { connectSocket } from '../../services/socketService';
+
+const JITSI_DOMAIN = (process.env.EXPO_PUBLIC_JITSI_DOMAIN || 'meet.jit.si').replace(/^https?:\/\//, '').replace(/\/$/, '');
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 type Params = {
@@ -34,6 +37,7 @@ type Params = {
   roomId?:        string;      // override room name
   displayName?:   string;      // "Dr. Smith" or student name
   role?:          'student' | 'counselor';
+  autoOpenInBrowser?: boolean;
   // legacy props forwarded from old screens
   counselorName?:  string;
   counselorPhone?: string;
@@ -58,9 +62,9 @@ const buildJitsiHtml = (roomName: string, displayName: string) => `
 </head>
 <body>
   <div id="jitsi-container"></div>
-  <script src="https://meet.jit.si/external_api.js"></script>
+  <script src="https://${JITSI_DOMAIN}/external_api.js"></script>
   <script>
-    const api = new JitsiMeetExternalAPI('meet.jit.si', {
+    const api = new JitsiMeetExternalAPI(${JSON.stringify(JITSI_DOMAIN)}, {
       roomName: ${JSON.stringify(roomName)},
       parentNode: document.querySelector('#jitsi-container'),
       width: '100%',
@@ -71,7 +75,10 @@ const buildJitsiHtml = (roomName: string, displayName: string) => `
         startWithVideoMuted: false,
         disableDeepLinking: true,
         enableWelcomePage: false,
-        prejoinPageEnabled: false,
+        // Jitsi replaced prejoinPageEnabled with prejoinConfig.enabled.
+        // Disabling prejoin makes the native WebView enter the session directly
+        // instead of waiting for the counselor to press Jitsi's Join meeting button.
+        prejoinConfig: { enabled: false },
         disableInviteFunctions: true,
         toolbarButtons: [
           'microphone', 'camera', 'desktop', 'fullscreen',
@@ -92,16 +99,22 @@ const buildJitsiHtml = (roomName: string, displayName: string) => `
       },
     });
 
-    // Relay events to React Native via window.ReactNativeWebView.postMessage
-    api.addEventListener('audioMuteStatusChanged',  (e) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mute',     muted: e.muted })));
-    api.addEventListener('videoMuteStatusChanged',  (e) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'video',    muted: e.muted })));
-    api.addEventListener('videoConferenceLeft',      ()  => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ended' })));
-    api.addEventListener('videoConferenceJoined',    ()  => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'joined' })));
-    api.addEventListener('participantJoined',        (e) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'peer-joined', id: e.id, displayName: e.displayName })));
-    api.addEventListener('participantLeft',          (e) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'peer-left',   id: e.id })));
+    const notifyApp = (payload) => {
+      if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+      if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
+    };
+    api.addEventListener('audioMuteStatusChanged', (e) => notifyApp({ type: 'mute', muted: e.muted }));
+    api.addEventListener('videoMuteStatusChanged', (e) => notifyApp({ type: 'video', muted: e.muted }));
+    api.addEventListener('videoConferenceLeft', () => notifyApp({ type: 'ended' }));
+    api.addEventListener('videoConferenceJoined', () => notifyApp({ type: 'joined' }));
+    api.addEventListener('participantJoined', (e) => notifyApp({ type: 'peer-joined', id: e.id, displayName: e.displayName }));
+    api.addEventListener('participantLeft', (e) => notifyApp({ type: 'peer-left', id: e.id }));
 
     // Expose hangup so React Native can end the call
     window.endCall = () => api.executeCommand('hangup');
+    window.addEventListener('message', (event) => {
+      if (event.data === 'uwell-hangup') window.endCall();
+    });
   </script>
 </body>
 </html>
@@ -122,12 +135,12 @@ export default function VideoCallScreen() {
 
   // Derive display name and room
   const displayName = params.displayName ||
-    (role === 'counselor' ? (params.studentName || 'Counselor') : (params.counselorName || 'Student'));
+    (role === 'counselor' ? (params.counselorName || 'Counselor') : (params.studentName || 'Student'));
 
-  const roomId = params.roomId ||
-    (appointmentId ? `uwell-${appointmentId}` : `uwell-${Date.now()}`);
+  const fallbackRoomIdRef = useRef(`uwell-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const roomId = params.roomId || fallbackRoomIdRef.current;
 
-  const webRef   = useRef<WebView>(null);
+  const webRef   = useRef<any>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -139,34 +152,123 @@ export default function VideoCallScreen() {
   const [isVideoOff,      setIsVideoOff]       = useState(false);
   const [webViewLoaded,   setWebViewLoaded]    = useState(false);
   const [loadError,       setLoadError]        = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [mediaPermissionReady, setMediaPermissionReady] = useState(Platform.OS !== 'android');
+  const [roomUnavailable, setRoomUnavailable] = useState(false);
+  const [callAccessFailed, setCallAccessFailed] = useState(false);
+  const [socketRoomAuthorized, setSocketRoomAuthorized] = useState(false);
+  const [externalBrowserOpened, setExternalBrowserOpened] = useState(false);
+  const browserLaunchAttemptedRef = useRef(false);
+  const endingRef = useRef(false);
+
+  const requestAndroidMediaPermissions = useCallback(async () => {
+    if (Platform.OS !== 'android') return true;
+    try {
+      const permissions = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+      ]);
+      const granted = Object.values(permissions).every((result) => result === PermissionsAndroid.RESULTS.GRANTED);
+      setPermissionDenied(!granted);
+      setMediaPermissionReady(true);
+      setLoadError(!granted);
+      return granted;
+    } catch {
+      setPermissionDenied(true);
+      setMediaPermissionReady(true);
+      setLoadError(true);
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') requestAndroidMediaPermissions();
+  }, [requestAndroidMediaPermissions]);
+
+  useEffect(() => {
+    if (!params.autoOpenInBrowser || Platform.OS === 'web' || !socketRoomAuthorized || browserLaunchAttemptedRef.current) return;
+    browserLaunchAttemptedRef.current = true;
+    const url = `https://${JITSI_DOMAIN}/${encodeURIComponent(roomId)}`;
+    Linking.openURL(url)
+      .then(() => setExternalBrowserOpened(true))
+      .catch(() => {
+        browserLaunchAttemptedRef.current = false;
+        Alert.alert('Could not open video call', 'The call will stay open in UWell. Check that your device has a browser installed.');
+      });
+  }, [params.autoOpenInBrowser, roomId, socketRoomAuthorized]);
 
   /* ── socket ── */
   const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
+  const handleEndRef = useRef<((confirm?: boolean) => void) | null>(null);
+  const roomAuthorizedRef = useRef(false);
 
   useEffect(() => {
     const socket = connectSocket();
     socketRef.current = socket;
+    let active = true;
+    roomAuthorizedRef.current = false;
+    endingRef.current = false;
+    setSocketRoomAuthorized(false);
+    setRoomUnavailable(false);
+    setCallAccessFailed(false);
+    const joinRoom = () => socket.emit('join-room', { roomId, userName: displayName, role });
 
-    socket.emit('join-room', { roomId, userName: displayName, role });
-
-    socket.on('room-joined',  ({ participantCount }) => {
-      if (participantCount > 1) setPeerConnected(true);
-    });
-    socket.on('peer-joined',  ({ userName }) => {
+    const onCallRoomUnavailable = (data: { roomId?: string }) => {
+      if (data?.roomId === roomId) {
+        setRoomUnavailable(true);
+        setLoadError(true);
+      }
+    };
+    const onRoomJoined = (data: { roomId?: string; participantCount?: number }) => {
+      if (data?.roomId !== roomId) return;
+      roomAuthorizedRef.current = true;
+      // A temporary socket failure may recover before this room is authorized.
+      // Clear the loading error so the video frame can mount after recovery.
+      setCallAccessFailed(false);
+      setRoomUnavailable(false);
+      setLoadError(false);
+      setSocketRoomAuthorized(true);
+      if ((data.participantCount || 0) > 1) setPeerConnected(true);
+    };
+    const onPeerJoined = ({ userName, roomId: eventRoomId }: { userName?: string; roomId?: string }) => {
+      if (eventRoomId && eventRoomId !== roomId) return;
       setPeerConnected(true);
       setPeerName(userName || '');
-    });
-    socket.on('peer-left',    () => { setPeerConnected(false); setPeerName(''); });
-    socket.on('session-ended', () => handleEnd(false));
+    };
+    const onPeerLeft = ({ roomId: eventRoomId }: { roomId?: string }) => {
+      if (eventRoomId && eventRoomId !== roomId) return;
+      setPeerConnected(false);
+      setPeerName('');
+    };
+    const onSessionEnded = (data: { roomId?: string }) => {
+      if (!data?.roomId || data.roomId === roomId) handleEndRef.current?.(false);
+    };
+    socket.on('call-room-unavailable', onCallRoomUnavailable);
+    socket.on('room-joined', onRoomJoined);
+    socket.on('peer-joined', onPeerJoined);
+    socket.on('peer-left', onPeerLeft);
+    socket.on('session-ended', onSessionEnded);
+    if (socket.connected) joinRoom();
+    socket.on('connect', joinRoom);
+
+    const accessTimeout = setTimeout(() => {
+      if (!active || roomAuthorizedRef.current) return;
+      setCallAccessFailed(true);
+      setLoadError(true);
+    }, 15000);
 
     return () => {
+      active = false;
+      clearTimeout(accessTimeout);
       socket.emit('leave-room', { roomId });
-      socket.off('room-joined');
-      socket.off('peer-joined');
-      socket.off('peer-left');
-      socket.off('session-ended');
+      socket.off('connect', joinRoom);
+      socket.off('room-joined', onRoomJoined);
+      socket.off('peer-joined', onPeerJoined);
+      socket.off('peer-left', onPeerLeft);
+      socket.off('session-ended', onSessionEnded);
+      socket.off('call-room-unavailable', onCallRoomUnavailable);
     };
-  }, [roomId]);
+  }, [roomId, displayName, role]);
 
   /* ── pulse animation ── */
   useEffect(() => {
@@ -179,6 +281,13 @@ export default function VideoCallScreen() {
     pulse.start();
     return () => pulse.stop();
   }, []);
+
+  useEffect(() => navigation.addListener('beforeRemove', () => {
+    if (endingRef.current) return;
+    endingRef.current = true;
+    socketRef.current?.emit('session-ended', { roomId });
+    socketRef.current?.emit('leave-room', { roomId });
+  }), [navigation, roomId]);
 
   /* ── timer ── */
   useEffect(() => {
@@ -199,7 +308,9 @@ export default function VideoCallScreen() {
   /* ── WebView message handler ── */
   const handleWebViewMessage = useCallback((event: any) => {
     try {
-      const msg = JSON.parse(event.nativeEvent.data);
+      const rawMessage = event?.nativeEvent?.data ?? event?.data;
+      const msg = typeof rawMessage === 'string' ? JSON.parse(rawMessage) : rawMessage;
+      if (!msg?.type) return;
       const socket = socketRef.current;
 
       if (msg.type === 'joined') {
@@ -228,11 +339,24 @@ export default function VideoCallScreen() {
     } catch { /* ignore parse errors */ }
   }, [roomId]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
+    const onJitsiMessage = (event: MessageEvent) => {
+      if (event.source !== webRef.current?.contentWindow || event.origin !== window.location.origin) return;
+      handleWebViewMessage(event);
+    };
+    window.addEventListener('message', onJitsiMessage);
+    return () => window.removeEventListener('message', onJitsiMessage);
+  }, [handleWebViewMessage]);
+
   /* ── End call ── */
   const handleEnd = useCallback((confirm = true) => {
     const doEnd = () => {
+      if (endingRef.current) return;
+      endingRef.current = true;
       // Tell WebView to hang up
-      webRef.current?.injectJavaScript('window.endCall && window.endCall(); true;');
+      if (Platform.OS === 'web') webRef.current?.contentWindow?.postMessage('uwell-hangup', '*');
+      else webRef.current?.injectJavaScript('window.endCall && window.endCall(); true;');
       // Notify peers via socket
       if (socketRef.current) {
         socketRef.current.emit('session-ended', { roomId });
@@ -253,6 +377,7 @@ export default function VideoCallScreen() {
       ],
     );
   }, [roomId, navigation]);
+  handleEndRef.current = handleEnd;
 
   /* ── Mute toggle (via WebView injection) ── */
   const toggleMute = () => {
@@ -274,6 +399,18 @@ export default function VideoCallScreen() {
   };
 
   const html = buildJitsiHtml(roomId, displayName);
+
+  // Android WebView media capture can vary across Expo Go / System WebView
+  // versions. Opening the same room in the installed browser lets its native
+  // camera and microphone permission flow handle the session.
+  const openCallInBrowser = useCallback(async () => {
+    const url = `https://${JITSI_DOMAIN}/${encodeURIComponent(roomId)}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Could not open video call', 'Please install or enable a web browser, then try again.');
+    }
+  }, [roomId]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -326,28 +463,60 @@ export default function VideoCallScreen() {
         {!webViewLoaded && !loadError && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#EF806B" />
-            <Text style={styles.loadingText}>Starting video session…</Text>
-            <Text style={styles.loadingSubText}>Allow camera & microphone access when prompted</Text>
+            <Text style={styles.loadingText}>{socketRoomAuthorized ? 'Starting video session…' : 'Verifying call invitation…'}</Text>
+            <Text style={styles.loadingSubText}>{socketRoomAuthorized ? 'Allow camera & microphone access when prompted' : 'Connecting securely to the UWell call service'}</Text>
           </View>
         )}
 
         {loadError && (
           <View style={styles.loadingOverlay}>
             <Text style={styles.errorEmoji}>📡</Text>
-            <Text style={styles.errorTitle}>Could not load video session</Text>
+            <Text style={styles.errorTitle}>{roomUnavailable ? 'This call is no longer available' : callAccessFailed ? 'Could not verify this call' : 'Could not load video session'}</Text>
             <Text style={styles.errorSub}>
-              Check your internet connection. Jitsi Meet requires an active connection.
+              {roomUnavailable
+                ? 'The call may have ended or the invitation expired. Return to the previous screen and start a new call.'
+                : callAccessFailed
+                ? 'The call server could not authorize this room. Check your connection and start a new call.'
+                : permissionDenied
+                ? 'Camera and microphone permissions are required. Allow them in device settings, then try again.'
+                : 'Check your internet connection. Jitsi Meet requires an active connection.'}
             </Text>
             <TouchableOpacity
               style={styles.reloadBtn}
-              onPress={() => { setLoadError(false); setWebViewLoaded(false); }}
+              onPress={() => {
+                if (roomUnavailable || callAccessFailed) {
+                  navigation.goBack();
+                  return;
+                }
+                setLoadError(false);
+                setWebViewLoaded(false);
+                setMediaPermissionReady(Platform.OS !== 'android');
+                if (Platform.OS === 'android') requestAndroidMediaPermissions();
+              }}
             >
-              <Text style={styles.reloadBtnText}>Try Again</Text>
+              <Text style={styles.reloadBtnText}>{roomUnavailable || callAccessFailed ? 'Return' : 'Try Again'}</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {!loadError && (
+          {!loadError && socketRoomAuthorized && mediaPermissionReady && Platform.OS === 'web' && React.createElement('iframe', {
+          ref: webRef,
+          title: 'UWell video counseling session',
+          srcDoc: html,
+          allow: 'camera; microphone; display-capture; autoplay; fullscreen',
+          allowFullScreen: true,
+          onLoad: () => setWebViewLoaded(true),
+          onError: () => setLoadError(true),
+          style: { width: '100%', height: '100%', border: 0, backgroundColor: '#1A1A2E' },
+        })}
+        {externalBrowserOpened && (
+          <View style={styles.loadingOverlay}>
+            <Text style={styles.errorTitle}>Call opened in your browser</Text>
+            <Text style={styles.errorSub}>Use the browser for camera, microphone, and call controls. Return here when you finish to close the UWell call.</Text>
+          </View>
+        )}
+
+        {!externalBrowserOpened && !loadError && socketRoomAuthorized && mediaPermissionReady && Platform.OS !== 'web' && (
           <WebView
             ref={webRef}
             source={{ html }}
@@ -371,7 +540,25 @@ export default function VideoCallScreen() {
       </View>
 
       {/* ── Native control bar (mirrors Jitsi controls for quick access) ── */}
-      <View style={styles.controlsBar}>
+      {Platform.OS !== 'web' && <View style={styles.controlsBar}>
+        {externalBrowserOpened ? (
+          <TouchableOpacity
+            style={[styles.controlBtn, styles.endCallBtn]}
+            onPress={() => handleEnd(true)}
+            accessibilityLabel="End session"
+          >
+            <Text style={styles.controlIcon}>📵</Text>
+            <Text style={styles.endCallLabel}>End</Text>
+          </TouchableOpacity>
+        ) : <>
+        <TouchableOpacity
+          style={styles.browserFallback}
+          onPress={openCallInBrowser}
+          accessibilityRole="button"
+          accessibilityLabel="Open this video call in your browser"
+        >
+          <Text style={styles.browserFallbackText}>Video or audio not working? Open call in browser</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={[styles.controlBtn, isMuted && styles.controlBtnActive]}
           onPress={toggleMute}
@@ -410,7 +597,8 @@ export default function VideoCallScreen() {
           <Text style={styles.controlIcon}>📵</Text>
           <Text style={styles.endCallLabel}>End</Text>
         </TouchableOpacity>
-      </View>
+        </>}
+      </View>}
     </SafeAreaView>
   );
 }
@@ -472,6 +660,7 @@ const styles = StyleSheet.create({
 
   controlsBar: {
     flexDirection:    'row',
+    flexWrap:         'wrap',
     justifyContent:   'space-around',
     alignItems:       'center',
     paddingVertical:  13,
@@ -480,6 +669,15 @@ const styles = StyleSheet.create({
     borderTopWidth:   1,
     borderTopColor:   '#252545',
   },
+  browserFallback: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginBottom: 8,
+    borderRadius: 10,
+    backgroundColor: '#242440',
+  },
+  browserFallbackText: { color: '#D0E0F5', fontSize: 11, fontWeight: '600' },
   controlBtn:       { alignItems: 'center', justifyContent: 'center', width: 62, height: 62, borderRadius: 31, backgroundColor: '#242440' },
   controlBtnActive: { backgroundColor: '#3D3D60' },
   controlIcon:      { fontSize: 22 },

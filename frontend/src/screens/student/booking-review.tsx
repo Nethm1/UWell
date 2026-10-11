@@ -138,6 +138,7 @@ export default function BookingReviewScreen() {
 
       navigation.navigate('BookingConfirmed', {
         appointmentId:          res?.data?._id || '',
+        counselorId:            counselorId || '',
         date:                   dateStr,
         time:                   timeStr,
         sessionType:            sessionTypeStr,
