@@ -9,27 +9,36 @@ import AppointmentsScreen from '../screens/welfare/AppointmentsScreen';
 import AppointmentDetailsScreen from '../screens/welfare/AppointmentDetailsScreen';
 import ServicesScreen from '../screens/welfare/ServicesScreen';
 import ServiceDetailsScreen from '../screens/welfare/ServiceDetailsScreen';
-import SupportInformationScreen from '../screens/welfare/SupportInformationScreen';
-import SupportDetailsScreen from '../screens/welfare/SupportDetailsScreen';
 import ProfileScreen from '../screens/welfare/ProfileScreen';
 import PrivacySecurityScreen from '../screens/welfare/PrivacySecurityScreen';
 import PrivacyInformationScreen from '../screens/welfare/PrivacyInformationScreen';
 import WorkScheduleScreen from '../screens/welfare/WorkScheduleScreen';
+import StudentMessagesScreen from '../screens/welfare/StudentMessagesScreen';
+import StudentChatScreen from '../screens/welfare/StudentChatScreen';
 import { WelfareProvider } from '../context/WelfareContext';
 import { colors } from '../theme';
 
 const Tab = createBottomTabNavigator();
 const DashboardStack = createNativeStackNavigator();
+const MessagesStack = createNativeStackNavigator();
 const ServicesStack = createNativeStackNavigator();
 const AppointmentsStack = createNativeStackNavigator();
-const SupportStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 
 const DashboardStackScreen = () => (
   <DashboardStack.Navigator screenOptions={{ headerShown: false }}>
     <DashboardStack.Screen name="DashboardMain" component={DashboardScreen} />
     <DashboardStack.Screen name="Notifications" component={NotificationsScreen} />
+    <DashboardStack.Screen name="StudentMessages" component={StudentMessagesScreen} />
+    <DashboardStack.Screen name="StudentChat" component={StudentChatScreen} />
   </DashboardStack.Navigator>
+);
+
+const MessagesStackScreen = () => (
+  <MessagesStack.Navigator screenOptions={{ headerShown: false }}>
+    <MessagesStack.Screen name="MessagesMain" component={StudentMessagesScreen} />
+    <MessagesStack.Screen name="StudentChat" component={StudentChatScreen} />
+  </MessagesStack.Navigator>
 );
 
 const ServicesStackScreen = () => (
@@ -46,13 +55,6 @@ const AppointmentsStackScreen = () => (
   </AppointmentsStack.Navigator>
 );
 
-const SupportStackScreen = () => (
-  <SupportStack.Navigator screenOptions={{ headerShown: false }}>
-    <SupportStack.Screen name="SupportInfo" component={SupportInformationScreen} />
-    <SupportStack.Screen name="ServiceDetails" component={ServiceDetailsScreen} />
-    <SupportStack.Screen name="SupportDetails" component={SupportDetailsScreen} />
-  </SupportStack.Navigator>
-);
 
 const ProfileStackScreen = () => (
   <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
@@ -73,6 +75,13 @@ const tabIconMap: Record<string, (props: TabIconProps) => React.ReactElement> = 
       color={color}
     />
   ),
+  Messages: ({ color, size }) => (
+    <MaterialCommunityIcons
+      name="message-text-outline"
+      size={size || 24}
+      color={color}
+    />
+  ),
   Services: ({ color, size }) => (
     <MaterialCommunityIcons
       name="heart-pulse"
@@ -83,13 +92,6 @@ const tabIconMap: Record<string, (props: TabIconProps) => React.ReactElement> = 
   Appointments: ({ color, size }) => (
     <MaterialCommunityIcons
       name="calendar-blank-outline"
-      size={size || 24}
-      color={color}
-    />
-  ),
-  Support: ({ color, size }) => (
-    <MaterialCommunityIcons
-      name="shield-account-outline"
       size={size || 24}
       color={color}
     />
@@ -135,9 +137,9 @@ const WelfareNavigator = () => (
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardStackScreen} />
+      <Tab.Screen name="Messages" component={MessagesStackScreen} />
       <Tab.Screen name="Services" component={ServicesStackScreen} />
       <Tab.Screen name="Appointments" component={AppointmentsStackScreen} />
-      <Tab.Screen name="Support" component={SupportStackScreen} />
       <Tab.Screen name="Profile" component={ProfileStackScreen} />
     </Tab.Navigator>
   </WelfareProvider>

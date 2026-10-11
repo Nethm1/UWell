@@ -10,7 +10,7 @@ const mongoose = require('mongoose');
 const notificationSchema = new mongoose.Schema(
   {
     recipientId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       required: true,
     },
     recipientType: {
@@ -30,13 +30,15 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['appointment_updated', 'appointment_cancelled', 'appointment_deleted', 'appointment_rescheduled', 'general'],
       default: 'general',
     },
     appointmentId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Appointment',
+      type: mongoose.Schema.Types.Mixed,
       default: null,
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
     isRead: {
       type: Boolean,
@@ -45,7 +47,16 @@ const notificationSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (doc, ret) => {
+        ret.id = ret._id ? ret._id.toString() : '';
+        ret.unread = !ret.isRead;
+        return ret;
+      },
+    },
   }
 );
 
 module.exports = mongoose.model('Notification', notificationSchema);
+

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Animated,
   Easing,
@@ -7,10 +7,15 @@ import {
   StyleSheet,
   Text,
   View,
+  Modal,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { notificationService } from '../../services/notificationService';
 
 const CORAL = '#EF806B';
 const CREAM = '#FFF9F3';
@@ -290,6 +295,116 @@ export default function HomeScreen() {
   const slideAnim = useRef(new Animated.Value(14)).current;
   const logoScale = useRef(new Animated.Value(0.92)).current;
   const characterFloat = useRef(new Animated.Value(0)).current;
+  const [notificationPanelVisible, setNotificationPanelVisible] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoadingNotifs(true);
+      const res = await notificationService.getNotifications();
+      if (res?.notifications) {
+        setNotifications(res.notifications);
+      }
+    } catch (err) {
+      console.warn('[Student Home] Error loading notifications:', err);
+    } finally {
+      setLoadingNotifs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+
+    const unsubNotif = notificationService.onNotificationReceived((newNotif: any) => {
+      setNotifications((prev) => [
+        newNotif,
+        ...prev.filter((n) => (n._id || n.id) !== (newNotif._id || newNotif.id)),
+      ]);
+    });
+
+    const unsubApt = notificationService.onAppointmentChange(
+      () => fetchNotifications(),
+      () => fetchNotifications()
+    );
+
+    return () => {
+      if (unsubNotif) unsubNotif();
+      if (unsubApt) unsubApt();
+    };
+  }, [fetchNotifications]);
+
+  const unreadCount = notifications.filter((n) => n.unread || !n.isRead).length;
+
+  const handleMarkRead = async (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => ((n._id || n.id) === id ? { ...n, unread: false, isRead: true } : n))
+    );
+    await notificationService.markAsRead(id);
+  };
+
+  const handleMarkAllRead = async () => {
+    setNotifications((prev) =>
+      prev.map((n) => ({ ...n, unread: false, isRead: true }))
+    );
+    await notificationService.markAllAsRead();
+  };
+
+  const handleNotificationClick = async (item: any) => {
+    const id = item._id || item.id;
+    await handleMarkRead(id);
+    setNotificationPanelVisible(false);
+
+    // 1. Welfare Officer message & emergency alerts
+    const isWelfare =
+      item.type === 'welfare_message' ||
+      item.type === 'emergency_sos' ||
+      item.type === 'welfare' ||
+      Boolean(item.metadata?.officerId || item.metadata?.conversationId) ||
+      (typeof item.title === 'string' && /message from|welfare/i.test(item.title));
+
+    if (isWelfare) {
+      const officerId =
+        item.metadata?.officerId ||
+        item.officerId ||
+        item.targetId ||
+        (item.appointmentId && !String(item.type).startsWith('appointment_') ? String(item.appointmentId) : '');
+
+      const conversationId =
+        item.metadata?.conversationId ||
+        (item.appointmentId ? String(item.appointmentId) : '');
+
+      const officerName =
+        item.metadata?.officerName ||
+        (item.title
+          ? item.title
+              .replace(/^Message from\s*/i, '')
+              .replace(/^[🚨\s]*EMERGENCY SOS ALERT/i, '')
+              .trim()
+          : '') ||
+        'Welfare Officer';
+
+      const emergencyPhone = item.metadata?.emergencyPhone || '';
+
+      navigation.navigate('WelfareChat', {
+        officerId,
+        conversationId,
+        officerName,
+        emergencyPhone,
+      });
+      return;
+    }
+
+    // 2. Appointment notifications
+    if (item.appointmentId) {
+      navigation.getParent()?.navigate('Sessions', {
+        screen: 'AppointmentDetails',
+        params: { appointmentId: String(item.appointmentId) },
+      });
+    } else {
+      navigation.getParent()?.navigate('Sessions');
+    }
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -362,7 +477,28 @@ export default function HomeScreen() {
 
           <View style={styles.header}>
 
-            <View style={styles.headerSideSpace} />
+            <Pressable
+              style={({ pressed }) => [
+                styles.bellButton,
+                pressed && styles.pressed,
+              ]}
+              onPress={() => setNotificationPanelVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+            >
+              <Ionicons
+                name={unreadCount > 0 ? "notifications" : "notifications-outline"}
+                size={21}
+                color={unreadCount > 0 ? CORAL : DARK}
+              />
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
 
             <UWellLogo scaleAnim={logoScale} />
 
@@ -618,6 +754,78 @@ export default function HomeScreen() {
           </Pressable>
 
           {/* =================================================
+              STUDENT WELFARE & EMERGENCY SUPPORT
+          ================================================= */}
+
+          <View style={styles.sectionHeaderAppointment}>
+            <View>
+              <Text style={styles.sectionTitle}>
+                Student Welfare Support
+              </Text>
+              <Text style={styles.sectionSubtitle}>
+                Direct advocacy, bursaries & emergency assistance
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={() =>
+                navigation.navigate('WelfareDirectory')
+              }
+            >
+              <Text style={styles.viewAll}>
+                View Officers
+              </Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.welfareCard,
+              pressed && styles.cardPressed,
+            ]}
+            onPress={() =>
+              navigation.navigate('WelfareDirectory')
+            }
+          >
+            <View style={styles.welfareIconContainer}>
+              <MaterialCommunityIcons name="shield-account" size={26} color="#E8836B" />
+            </View>
+
+            <View style={styles.welfareText}>
+              <View style={styles.welfareTitleRow}>
+                <Text style={styles.welfareTitle}>
+                  Welfare Officers On Duty
+                </Text>
+                <View style={styles.welfareLiveBadge}>
+                  <View style={styles.welfareLiveDot} />
+                  <Text style={styles.welfareLiveText}>Available</Text>
+                </View>
+              </View>
+
+              <Text style={styles.welfareDescription}>
+                Chat directly with on-duty welfare officers for personal advocacy, bursaries, or crisis support.
+              </Text>
+
+              <View style={styles.welfareActionRow}>
+                <View style={styles.welfareActionChip}>
+                  <Ionicons name="chatbubble-ellipses" size={12} color="#E8836B" />
+                  <Text style={styles.welfareActionChipText}>Direct Chat</Text>
+                </View>
+                <View style={[styles.welfareActionChip, { backgroundColor: '#FBE1DE' }]}>
+                  <MaterialCommunityIcons name="shield-alert" size={13} color="#C0392B" />
+                  <Text style={[styles.welfareActionChipText, { color: '#C0392B' }]}>Emergency SOS</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.appointmentArrow}>
+              <Text style={styles.appointmentArrowText}>
+                ›
+              </Text>
+            </View>
+          </Pressable>
+
+          {/* =================================================
               WELLNESS RESOURCES
           ================================================= */}
 
@@ -681,6 +889,168 @@ export default function HomeScreen() {
 
       </Animated.View>
 
+      {/* =================================================
+          NOTIFICATION PANEL (BOTTOM SHEET MODAL)
+      ================================================= */}
+      <Modal
+        visible={notificationPanelVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setNotificationPanelVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={styles.modalBackdropTap}
+            onPress={() => setNotificationPanelVisible(false)}
+          />
+
+          <View style={styles.sheetContainer}>
+            {/* Sheet Handle */}
+            <View style={styles.sheetHandle} />
+
+            {/* Header */}
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetTitleRow}>
+                <View style={styles.bellIconCircle}>
+                  <Ionicons name="notifications" size={18} color={CORAL} />
+                </View>
+                <Text style={styles.sheetTitle}>Notifications</Text>
+                {unreadCount > 0 && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>{unreadCount} new</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                {unreadCount > 0 && (
+                  <TouchableOpacity onPress={handleMarkAllRead} activeOpacity={0.7}>
+                    <Text style={styles.markAllReadText}>Mark all read</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={() => setNotificationPanelVisible(false)}
+                  style={styles.sheetCloseBtn}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close" size={20} color={DARK} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Content List */}
+            <ScrollView
+              style={styles.notifScrollView}
+              contentContainerStyle={styles.notifScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {loadingNotifs && notifications.length === 0 ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={CORAL} />
+                  <Text style={styles.loadingText}>Checking notifications...</Text>
+                </View>
+              ) : notifications.length === 0 ? (
+                <View style={styles.emptyNotifContainer}>
+                  <View style={styles.emptyIconCircle}>
+                    <Feather name="check" size={28} color="#4E9B5C" />
+                  </View>
+                  <Text style={styles.emptyNotifTitle}>You're all caught up!</Text>
+                  <Text style={styles.emptyNotifSub}>
+                    When a Welfare Officer or Counselor updates your appointment, alerts will appear here in real time.
+                  </Text>
+                </View>
+              ) : (
+                notifications.map((item) => {
+                  const id = item._id || item.id;
+                  const isUnread = item.unread || !item.isRead;
+                  const isWelfare =
+                    item.type === 'welfare_message' ||
+                    item.type === 'emergency_sos' ||
+                    item.type === 'welfare' ||
+                    Boolean(item.metadata?.officerId || item.metadata?.conversationId) ||
+                    (typeof item.title === 'string' && /message from|welfare/i.test(item.title));
+                  const isRescheduled = item.type === 'appointment_rescheduled';
+                  const isCancelled = item.type === 'appointment_cancelled' || item.type === 'appointment_deleted';
+
+                  return (
+                    <TouchableOpacity
+                      key={id}
+                      style={[styles.notifCard, isUnread && styles.notifCardUnread]}
+                      onPress={() => handleNotificationClick(item)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={[
+                        styles.notifIconBox,
+                        isWelfare && { backgroundColor: '#EBF5FB' },
+                        isRescheduled && { backgroundColor: '#FFF3D6' },
+                        isCancelled && { backgroundColor: '#FDEAE8' },
+                      ]}>
+                        <Ionicons
+                          name={
+                            isWelfare
+                              ? 'chatbubble-ellipses'
+                              : isRescheduled
+                              ? 'calendar'
+                              : isCancelled
+                              ? 'alert-circle'
+                              : 'notifications'
+                          }
+                          size={18}
+                          color={
+                            isWelfare
+                              ? '#2980B9'
+                              : isRescheduled
+                              ? '#B96700'
+                              : isCancelled
+                              ? '#C94C4C'
+                              : CORAL
+                          }
+                        />
+                      </View>
+
+                      <View style={styles.notifContent}>
+                        <View style={styles.notifTopRow}>
+                          <Text style={[styles.notifTitle, isUnread && styles.notifTitleUnread]}>
+                            {item.title}
+                          </Text>
+                          {isUnread && <View style={styles.unreadDot} />}
+                        </View>
+
+                        <Text style={styles.notifMessage}>{item.message}</Text>
+                        {isWelfare && (
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#2980B9', marginTop: 4 }}>
+                            💬 Tap to open welfare chat & reply
+                          </Text>
+                        )}
+
+                        <View style={styles.notifFooterRow}>
+                          <Text style={styles.notifTime}>
+                            {item.createdAt
+                              ? new Date(item.createdAt).toLocaleDateString(undefined, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : 'Recently'}
+                          </Text>
+
+                          {item.appointmentId && (
+                            <View style={styles.sessionChip}>
+                              <Text style={styles.sessionChipText}>View Appointment ›</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -719,6 +1089,278 @@ const styles = StyleSheet.create({
 
   headerSideSpace: {
     width: 46,
+  },
+
+  bellButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: WHITE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#F1E5DF',
+    position: 'relative',
+    shadowColor: DARK,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  notificationBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 19,
+    height: 19,
+    borderRadius: 9.5,
+    backgroundColor: CORAL,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: WHITE,
+  },
+
+  notificationBadgeText: {
+    color: WHITE,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  /* =======================================================
+     NOTIFICATION PANEL MODAL
+  ======================================================= */
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(50, 35, 30, 0.45)',
+    justifyContent: 'flex-end',
+  },
+
+  modalBackdropTap: {
+    flex: 1,
+  },
+
+  sheetContainer: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingBottom: 32,
+    paddingHorizontal: 20,
+    maxHeight: '80%',
+    shadowColor: DARK,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E6D7D1',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5ECE7',
+  },
+
+  sheetTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  bellIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: PEACH,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: DARK,
+  },
+
+  newBadge: {
+    backgroundColor: PEACH,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+
+  newBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: CORAL,
+  },
+
+  markAllReadText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: CORAL,
+  },
+
+  sheetCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8EFEA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  notifScrollView: {
+    marginTop: 10,
+  },
+
+  notifScrollContent: {
+    paddingVertical: 6,
+  },
+
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 36,
+    gap: 10,
+  },
+
+  loadingText: {
+    fontSize: 12,
+    color: MUTED,
+  },
+
+  emptyNotifContainer: {
+    alignItems: 'center',
+    paddingVertical: 42,
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+
+  emptyIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+
+  emptyNotifTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: DARK,
+  },
+
+  emptyNotifSub: {
+    fontSize: 12.5,
+    color: MUTED,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 270,
+  },
+
+  notifCard: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 13,
+    borderRadius: 18,
+    marginBottom: 9,
+    backgroundColor: '#FAF7F5',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+
+  notifCardUnread: {
+    backgroundColor: '#FFF7F4',
+    borderColor: '#FCDFD7',
+  },
+
+  notifIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: PEACH,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+
+  notifContent: {
+    flex: 1,
+  },
+
+  notifTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+
+  notifTitle: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: DARK,
+    flex: 1,
+  },
+
+  notifTitleUnread: {
+    fontWeight: '800',
+    color: '#D8543E',
+  },
+
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: CORAL,
+    marginLeft: 6,
+  },
+
+  notifMessage: {
+    fontSize: 12,
+    color: '#5E4F49',
+    lineHeight: 17,
+  },
+
+  notifFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 7,
+  },
+
+  notifTime: {
+    fontSize: 10.5,
+    color: MUTED,
+  },
+
+  sessionChip: {
+    backgroundColor: PEACH,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 8,
+  },
+
+  sessionChipText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: CORAL,
   },
 
   /* =======================================================
@@ -1651,6 +2293,101 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#F0E5DF',
+  },
+
+  welfareCard: {
+    backgroundColor: WHITE,
+    borderRadius: 22,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F0E5DF',
+    marginTop: 4,
+    shadowColor: '#C6AEA1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+
+  welfareIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#FFF0EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+
+  welfareText: {
+    flex: 1,
+  },
+
+  welfareTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+
+  welfareTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: DARK,
+  },
+
+  welfareLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DDF3E4',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    gap: 4,
+  },
+
+  welfareLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#397052',
+  },
+
+  welfareLiveText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#397052',
+  },
+
+  welfareDescription: {
+    fontSize: 11,
+    color: MUTED,
+    lineHeight: 15,
+    marginBottom: 8,
+  },
+
+  welfareActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  welfareActionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF0EC',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 4,
+  },
+
+  welfareActionChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: CORAL,
   },
 
   appointmentIconContainer: {

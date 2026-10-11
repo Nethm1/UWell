@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Pressable,
   ScrollView, Alert, ActivityIndicator, Linking,
@@ -6,6 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { studentService } from '../../services/studentService';
+import { notificationService } from '../../services/notificationService';
+
 
 const CORAL = '#EF806B';
 const CREAM = '#FFF9F3';
@@ -108,6 +110,20 @@ export default function AppointmentDetailsScreen() {
       loadAppointment();
     }, [appointmentId]),
   );
+
+  useEffect(() => {
+    const unsub = notificationService.onAppointmentChange(
+      () => loadAppointment(),
+      () => {
+        Alert.alert('Appointment Cancelled', 'This appointment was removed by the Welfare Officer.', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      }
+    );
+    return () => {
+      if (unsub) unsub();
+    };
+  }, [appointmentId]);
 
   const loadAppointment = async () => {
     try {

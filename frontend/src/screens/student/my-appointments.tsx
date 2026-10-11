@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Pressable,
-  ScrollView, ActivityIndicator, RefreshControl,
+  ScrollView, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { studentService } from '../../services/studentService';
+import { notificationService } from '../../services/notificationService';
 
 const CORAL = '#EF806B';
 const CREAM = '#FFF9F3';
@@ -80,11 +81,29 @@ export default function MyAppointmentsScreen() {
   };
 
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       setLoading(true);
       fetchAppointments();
     }, [])
   );
+
+  useEffect(() => {
+    const unsubApt = notificationService.onAppointmentChange(
+      () => fetchAppointments(),
+      () => fetchAppointments()
+    );
+    const unsubNotif = notificationService.onNotificationReceived((notif: any) => {
+      fetchAppointments();
+      if (notif?.title && notif?.message) {
+        Alert.alert(notif.title, notif.message);
+      }
+    });
+
+    return () => {
+      if (unsubApt) unsubApt();
+      if (unsubNotif) unsubNotif();
+    };
+  }, []);
 
   const upcoming   = appointments.filter(a => a.status === 'upcoming' || a.status === 'confirmed');
   const past       = appointments.filter(a => a.status !== 'upcoming' && a.status !== 'confirmed');

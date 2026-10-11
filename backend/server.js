@@ -32,6 +32,10 @@ const io = new SocketServer(httpServer, {
   transports: ['websocket', 'polling'],
 });
 
+app.set('io', io);
+const { setGlobalIo } = require('./src/utils/notificationHelper');
+setGlobalIo(io);
+
 // Track which sockets are in which room
 const roomParticipants = new Map(); // roomId → Set<socketId>
 
@@ -79,6 +83,10 @@ io.on('connection', (socket) => {
   // ── user registration ──────────────────────────────────────────────────────
   socket.on('register-user', ({ userId, role }) => {
     if (!userId) return;
+    if (socket.data.userId && socket.data.userId !== userId) {
+      socket.leave('user:' + socket.data.userId);
+      console.log('[Socket] user switch: left user:' + socket.data.userId);
+    }
     socket.data.userId = userId;
     socket.data.role   = role || 'student';
     socket.join('user:' + userId);
@@ -114,6 +122,23 @@ io.on('connection', (socket) => {
   socket.on('peer-video-off',   (p) => socket.to(p.roomId).emit('peer-video-off',   { ...p, from: socket.id }));
   socket.on('peer-video-on',    (p) => socket.to(p.roomId).emit('peer-video-on',    { ...p, from: socket.id }));
   socket.on('session-ended',    (p) => socket.to(p.roomId).emit('session-ended',    { from: socket.id }));
+
+  // ── Welfare Chat & Emergency Real-time Signals ─────────────────────────────
+  socket.on('welfare:typing', ({ recipientId, isTyping, conversationId }) => {
+    if (!recipientId) return;
+    io.to('user:' + recipientId).emit('welfare:typing', {
+      senderId: socket.data.userId,
+      isTyping: Boolean(isTyping),
+      conversationId,
+    });
+  });
+
+  socket.on('welfare:emergency-alarm', (payload) => {
+    const { officerId } = payload || {};
+    if (!officerId) return;
+    console.log(`[Socket] 🚨 Emergency alarm from ${socket.id} -> user:${officerId}`);
+    io.to('user:' + officerId).emit('welfare:emergency-sos', payload);
+  });
 
   // ── disconnect cleanup ─────────────────────────────────────────────────────
   socket.on('disconnect', () => {
@@ -204,6 +229,15 @@ app.use('/api/counselor', require('./src/routes/counselor/counselorRoutes'));
 // ─── Welfare Module Routes ────────────────────────────────────────────────────
 // Profile, schedule, dashboard, appointments, counseling services & notifications
 app.use('/api/welfare', require('./src/routes/welfare/welfareRoutes'));
+
+// ─── Welfare Chat & Emergency SOS Routes ──────────────────────────────────────
+app.use('/api/welfare-chat', require('./src/routes/welfare/welfareChatRoutes'));
+
+// ─── Notifications (All Roles) ────────────────────────────────────────────────
+const notificationRoutes = require('./src/routes/notificationRoutes');
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/student/notifications', notificationRoutes);
+app.use('/api/counselor/notifications', notificationRoutes);
 
 // Counselors: read-only list + availability for students
 app.use('/api/student/counselors', (() => {
@@ -321,6 +355,9 @@ function listen(port, label) {
   return new Promise((resolve, reject) => {
     // Attach socket.io to ALT_PORT; everything else uses app directly.
     const server = (port === ALT_PORT) ? httpServer.listen(port, '0.0.0.0') : app.listen(port, '0.0.0.0');
+    if (port !== ALT_PORT) {
+      try { io.attach(server); } catch (e) {}
+    }
 
     server.once('listening', () => {
       console.log(`✅ ${label} listening on http://0.0.0.0:${port}`);
@@ -358,3 +395,5 @@ async function startServers() {
 }
 
 startServers();
+
+module.exports = { app, io, httpServer };

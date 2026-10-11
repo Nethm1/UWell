@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import { welfareService } from '../services/welfareService';
+import { notificationService } from '../services/notificationService';
 import {
   welfareAppointments as initialAppointments,
   welfareNotifications as initialNotifications,
@@ -85,8 +86,32 @@ export const WelfareProvider = ({ children }) => {
           }
         })
         .catch(() => { });
+
+      // Register socket room for Welfare Officer & listen for real-time events
+      const uid = authUser._id || authUser.id;
+      if (uid) {
+        notificationService.registerSocketUser(uid, 'welfare');
+      }
     }
   }, [authUser]);
+
+  useEffect(() => {
+    // Listen for live push notifications
+    const unsubNotif = notificationService.onNotificationReceived((newNotif) => {
+      setNotifications((prev) => [newNotif, ...prev.filter((n) => (n._id || n.id) !== (newNotif._id || newNotif.id))]);
+    });
+
+    // Listen for real-time appointment updates / deletes
+    const unsubApt = notificationService.onAppointmentChange(
+      () => refreshAppointments(),
+      () => refreshAppointments()
+    );
+
+    return () => {
+      if (unsubNotif) unsubNotif();
+      if (unsubApt) unsubApt();
+    };
+  }, []);
 
   const loadAllData = async () => {
     try {
@@ -112,7 +137,17 @@ export const WelfareProvider = ({ children }) => {
         apt = cached ? JSON.parse(cached) : initialAppointments;
       }
 
-      const notif = notifData ? JSON.parse(notifData) : initialNotifications;
+      let notif = notifData ? JSON.parse(notifData) : initialNotifications;
+      try {
+        const notifRes = await welfareService.getNotifications();
+        if (notifRes?.notifications && notifRes.notifications.length > 0) {
+          notif = notifRes.notifications;
+          await AsyncStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notif));
+        }
+      } catch (err) {
+        console.warn('Welfare notifications fetch fallback to cache:', err.message);
+      }
+
       let prof;
       if (authUser && (authUser.role === 'welfare' || authUser.staffId)) {
         prof = buildProfileFromAuth(authUser);
@@ -206,21 +241,23 @@ export const WelfareProvider = ({ children }) => {
   // ----- NOTIFICATIONS: UPDATE -----
   const markNotificationRead = async (id) => {
     const updated = notifications.map((n) =>
-      n.id === id ? { ...n, unread: false } : n
+      (n.id === id || n._id === id) ? { ...n, unread: false, isRead: true } : n
     );
     setNotifications(updated);
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(updated));
+      await welfareService.markNotificationRead(id);
     } catch (error) {
       console.error('markNotificationRead error:', error);
     }
   };
 
   const markAllNotificationsRead = async () => {
-    const updated = notifications.map((n) => ({ ...n, unread: false }));
+    const updated = notifications.map((n) => ({ ...n, unread: false, isRead: true }));
     setNotifications(updated);
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(updated));
+      await notificationService.markAllAsRead();
     } catch (error) {
       console.error('markAllNotificationsRead error:', error);
     }
@@ -228,10 +265,11 @@ export const WelfareProvider = ({ children }) => {
 
   // ----- NOTIFICATIONS: DELETE -----
   const deleteNotification = async (id) => {
-    const updated = notifications.filter((n) => n.id !== id);
+    const updated = notifications.filter((n) => n.id !== id && n._id !== id);
     setNotifications(updated);
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(updated));
+      await notificationService.deleteNotification(id);
     } catch (error) {
       console.error('deleteNotification error:', error);
     }

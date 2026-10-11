@@ -172,20 +172,20 @@ const DashboardScreen = ({ navigation }) => {
       screen: 'Appointments',
     },
     {
+      id: 'messages',
+      label: 'Student Chats',
+      desc: 'Triage & SOS alerts',
+      icon: 'message-text-outline',
+      isMaterial: true,
+      screen: 'StudentMessages',
+    },
+    {
       id: 'counselors',
       label: 'Counselors',
       desc: 'Live availability',
       icon: 'heart-pulse',
       isMaterial: true,
       screen: 'Services',
-    },
-    {
-      id: 'support',
-      label: 'Support Hub',
-      desc: 'Guides & policies',
-      icon: 'shield-account-outline',
-      isMaterial: true,
-      screen: 'Support',
     },
     {
       id: 'profile',
