@@ -288,7 +288,7 @@ const StudentChatScreen = ({ route, navigation }) => {
             </TouchableOpacity>
           )}
           <View style={styles.statusOnlineRow}>
-            <Ionicons name="lock-closed" size={10} color="#3973B9" style={{ marginRight: 4 }} />
+            <Ionicons name="lock-closed" size={10} color={colors.statusGreenText} style={{ marginRight: 4 }} />
             <Text style={styles.onlineText}>{isStudent ? 'Private chat · your counselor' : 'Private chat · booked student'}</Text>
           </View>
         </View>
@@ -298,10 +298,10 @@ const StudentChatScreen = ({ route, navigation }) => {
         ) : (
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.headerAction} onPress={() => openStudentContact('mailto', chatData?.email)} accessibilityRole="button" accessibilityLabel={`Email ${studentName}`}>
-              <Feather name="mail" size={17} color="#3973B9" />
+              <Feather name="mail" size={17} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerAction} onPress={() => openStudentContact('tel', chatData?.phone)} accessibilityRole="button" accessibilityLabel={`Call ${studentName}`}>
-              <Feather name="phone" size={17} color="#3973B9" />
+              <Feather name="phone" size={17} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity style={[styles.headerAction, styles.videoHeaderAction]} onPress={startVideoSession} accessibilityRole="button" accessibilityLabel={`Start a video session with ${studentName}`}>
               <Feather name="video" size={17} color="#FFFFFF" />
@@ -416,8 +416,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 5, marginLeft: 6 },
-  headerAction: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#EAF2FC', alignItems: 'center', justifyContent: 'center' },
-  videoHeaderAction: { backgroundColor: '#3973B9' },
+    headerAction: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+    videoHeaderAction: { backgroundColor: colors.primary },
   studentNameText: {
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,

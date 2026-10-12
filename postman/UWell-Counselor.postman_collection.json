@@ -1,0 +1,363 @@
+{
+  "info": {
+    "name": "UWell Counselor API",
+    "description": "Read-only smoke suite for the counselor module. Validates the endpoint shapes consumed by AppointmentsScreen, DashboardScreen, StudentListScreen, MessagesScreen and the floating tab bar. Requires the test counselor seeded via `node src/scripts/seedTestCounselor.js`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Health",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('health returns 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('health reports status OK', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.status).to.eql('OK');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/health", "host": ["{{baseUrl}}"], "path": ["api", "health"] },
+        "description": "Backend reachability probe."
+      }
+    },
+    {
+      "name": "2. Login (saves token)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('login returns 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('login succeeds', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.success).to.be.true;",
+              "});",
+              "",
+              "pm.test('login returns a usable token', () => {",
+              "  const body = pm.response.json();",
+              "  const token = body.token || (body.data && body.data.token);",
+              "  pm.expect(token, 'token missing from login response').to.be.a('string').and.not.empty;",
+              "  if (token) { pm.collectionVariables.set('token', token); }",
+              "});",
+              "",
+              "pm.test('login identifies the counselor role', () => {",
+              "  const body = pm.response.json();",
+              "  const role = body.role || (body.user && body.user.role);",
+              "  pm.expect(role).to.eql('counselor');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{counselorEmail}}\",\n  \"password\": \"{{counselorPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/counselor/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "counselor", "login"]
+        },
+        "description": "Authenticates and stores {{token}} for every later request."
+      }
+    },
+    {
+      "name": "3. Profile",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('profile returns 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('profile carries the fields ProfileScreen renders', () => {",
+              "  const body = pm.response.json();",
+              "  const p = body.data || body.profile || body;",
+              "  ['name', 'email', 'specialization', 'qualification', 'officeLocation', 'avatarInitials'].forEach((field) => {",
+              "    pm.expect(p, 'missing ' + field + ' - ProfileScreen reads profile.' + field).to.have.property(field);",
+              "  });",
+              "  pm.expect(p.name, 'profile.name must be displayable').to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/counselor/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "counselor", "profile"]
+        },
+        "description": "Profile data consumed by counselor ProfileScreen."
+      }
+    },
+    {
+      "name": "4. Stats",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('stats returns 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('stats returns an object', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.data || body.stats || body).to.be.an('object');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/counselor/stats",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "counselor", "stats"]
+        },
+        "description": "Dashboard counters."
+      }
+    },
+    {
+      "name": "5. Appointments",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('appointments return 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('appointments return an array', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : body.data;",
+              "  pm.expect(list, 'appointments payload is neither an array nor data[]').to.be.an('array');",
+              "  if (list) { pm.collectionVariables.set('appointmentCount', list.length); }",
+              "  if (list) { console.log('appointments returned:', list.length); }",
+              "});",
+              "",
+              "pm.test('each appointment has the fields the list card renders', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : (body.data || []);",
+              "  const allowed = ['Pending', 'Confirmed', 'Declined', 'Cancelled', 'Completed'];",
+              "  list.slice(0, 10).forEach((a, i) => {",
+              "    const key = a.id || a._id;",
+              "    pm.expect(key, 'appointment[' + i + '] has no id or _id to PUT against').to.be.a('string').and.not.empty;",
+              "    pm.expect(a, 'appointment[' + i + '] missing status').to.have.property('status');",
+              "    pm.expect(allowed, 'appointment[' + i + '] unexpected status: ' + a.status)",
+              "      .to.include(a.status);",
+              "  });",
+              "});",
+              "",
+              "pm.test('appointments expose the fields the Accept/Decline buttons need', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : (body.data || []);",
+              "  const pending = list.filter((a) => a.status === 'Pending');",
+              "  pm.expect(pending.every((a) => (a.id || a._id)), 'every pending item must carry a key to PUT').to.be.true;",
+              "  if (pending.length) { console.log('pending bookings awaiting Accept/Decline:', pending.length); }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/counselor/appointments",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "counselor", "appointments"]
+        },
+        "description": "Feeds AppointmentsScreen, including the new Accept/Decline button row."
+      }
+    },
+    {
+      "name": "6. Students",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('students return 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('students return an array', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : body.data;",
+              "  pm.expect(list, 'students payload is neither an array nor {data:[]}').to.be.an('array');",
+              "  if (list) { pm.collectionVariables.set('studentCount', list.length); }",
+              "  if (list) { console.log('students returned:', list.length); }",
+              "});",
+              "",
+              "pm.test('each student has a usable identifier and display name', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : (body.data || []);",
+              "  list.slice(0, 10).forEach((s, i) => {",
+              "    pm.expect(s, 'student[' + i + '] missing id').to.have.property('id');",
+              "    const name = s.name || [s.firstName, s.lastName].filter(Boolean).join(' ');",
+              "    pm.expect(name, 'student[' + i + '] has no displayable name').to.be.a('string').and.not.empty;",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/counselor/students",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "counselor", "students"]
+        },
+        "description": "Feeds StudentListScreen."
+      }
+    },
+    {
+      "name": "7. Messages (badge source)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('messages return 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('messages return an array', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : body.data;",
+              "  pm.expect(list, 'messages payload is neither an array nor {data:[]}').to.be.an('array');",
+              "});",
+              "",
+              "pm.test('conversations expose the unread flag the tab badge counts', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : (body.data || []);",
+              "  list.forEach((c, i) => {",
+              "    pm.expect(c, 'conversation[' + i + '] has no unread property; the badge cannot count')",
+              "      .to.have.property('unread');",
+              "  });",
+              "  const unread = list.filter((c) => c.unread).length;",
+              "  console.log('unread conversations (Messages badge):', unread);",
+              "});",
+              "",
+              "pm.test('conversations carry the student identifier the chat screen needs', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : (body.data || []);",
+              "  list.slice(0, 10).forEach((c, i) => {",
+              "    pm.expect(c, 'conversation[' + i + '] missing studentId').to.have.property('studentId');",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/counselor/messages",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "counselor", "messages"]
+        },
+        "description": "Drives both MessagesScreen and the floating tab bar unread badge."
+      }
+    },
+    {
+      "name": "8. Availability",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('availability returns 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('availability returns an array', () => {",
+              "  const body = pm.response.json();",
+              "  const list = Array.isArray(body) ? body : body.data;",
+              "  pm.expect(list, 'availability payload is neither an array nor {data:[]}').to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/counselor/availability",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "counselor", "availability"]
+        },
+        "description": "Feeds the reschedule slot picker."
+      }
+    },
+    {
+      "name": "9. Auth guard (expect 401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('protected route rejects a missing token with 401', () => {",
+              "  pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/counselor/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "counselor", "profile"]
+        },
+        "description": "Negative test - proves protect middleware still guards the route."
+      }
+    }
+  ],
+  "variable": [
+    { "key": "token", "value": "" },
+    { "key": "appointmentCount", "value": "0" },
+    { "key": "studentCount", "value": "0" }
+  ]
+}

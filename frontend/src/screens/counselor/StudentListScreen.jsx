@@ -22,10 +22,10 @@ import { counselorService } from '../../services/counselorService';
 
 const FILTERS = ['All', 'New', 'Active', 'Archived'];
 const FILTER_TONES = {
-  New: { bg: '#FFF1D6', text: '#9A5B00', accent: '#F4A62A' },
-  Active: { bg: '#DDF5EC', text: '#177957', accent: '#2BA77A' },
-  Archived: { bg: '#EEF0F5', text: '#687386', accent: '#94A0B2' },
-  Completed: { bg: '#E9E7FF', text: '#5953AD', accent: '#7971D7' },
+  New: { bg: '#FCE3D9', text: '#F46352', accent: '#F46352' },
+  Active: { bg: '#FCE3D9', text: '#F46352', accent: '#F46352' },
+  Archived: { bg: '#F5EDE6', text: '#8B7468', accent: '#8B7468' },
+  Completed: { bg: '#FCE3D9', text: '#481B25', accent: '#F46352' },
 };
 
 const StudentListScreen = ({ navigation }) => {
@@ -150,7 +150,7 @@ const StudentListScreen = ({ navigation }) => {
               activeOpacity={0.78}
               accessibilityLabel={`Open ${item.name}'s student record`}
             >
-              <Feather name="folder" size={15} color="#40556C" />
+              <Feather name="folder" size={15} color="#481B25" />
               <Text style={styles.recordButtonText}>Open record</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -169,8 +169,8 @@ const StudentListScreen = ({ navigation }) => {
               accessibilityLabel={status === 'Archived' ? `Restore ${item.name}` : `Archive ${item.name}`}
             >
               {updatingId === item.id
-                ? <ActivityIndicator size="small" color="#637184" />
-                : <Feather name={status === 'Archived' ? 'rotate-ccw' : 'archive'} size={16} color="#637184" />}
+                ? <ActivityIndicator size="small" color="#481B25" />
+                : <Feather name={status === 'Archived' ? 'rotate-ccw' : 'archive'} size={16} color="#481B25" />}
             </TouchableOpacity>
           </View>
         </View>
@@ -187,7 +187,7 @@ const StudentListScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F4F7FB" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF8F2" />
       <Animated.View style={[styles.container, { opacity: fade, transform: [{ translateY: rise }] }]}>
         <FlatList
           data={filteredStudents}
@@ -213,16 +213,16 @@ const StudentListScreen = ({ navigation }) => {
               </View>
 
               <View style={styles.searchWrap}>
-                <Feather name="search" size={17} color="#8793A3" />
+                <Feather name="search" size={17} color="#8B7468" />
                 <TextInput
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   placeholder="Search name, course, or email"
-                  placeholderTextColor="#97A1AF"
+                  placeholderTextColor="#8B7468"
                   style={styles.searchInput}
                   accessibilityLabel="Search students"
                 />
-                {!!searchQuery && <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Clear search"><Feather name="x-circle" size={16} color="#8793A3" /></TouchableOpacity>}
+                {!!searchQuery && <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Clear search"><Feather name="x-circle" size={16} color="#8B7468" /></TouchableOpacity>}
               </View>
 
               <View style={styles.filtersRow}>
@@ -249,7 +249,7 @@ const StudentListScreen = ({ navigation }) => {
           )}
           ListEmptyComponent={(
             <View style={styles.emptyCard}>
-              {loading ? <ActivityIndicator size="small" color="#25836C" /> : <View style={styles.emptyIcon}><Ionicons name={loadError ? 'cloud-offline-outline' : 'people-outline'} size={25} color="#25836C" /></View>}
+              {loading ? <ActivityIndicator size="small" color="#F46352" /> : <View style={styles.emptyIcon}><Ionicons name={loadError ? 'cloud-offline-outline' : 'people-outline'} size={25} color="#F46352" /></View>}
               <Text style={styles.emptyTitle}>{loading ? 'Loading your students' : emptyTitle}</Text>
               {!loading && <Text style={styles.emptyText}>{emptyDescription}</Text>}
               {loadError && <TouchableOpacity style={styles.retryButton} onPress={loadStudents}><Text style={styles.retryButtonText}>Try again</Text></TouchableOpacity>}
@@ -263,51 +263,51 @@ const StudentListScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F4F7FB' },
+  safeArea: { flex: 1, backgroundColor: '#FFF8F2' },
   container: { flex: 1 },
   listContent: { paddingHorizontal: 18, paddingTop: 14, flexGrow: 1 },
   backButton: { marginLeft: -6, marginBottom: 2 },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
   eyebrow: { flexDirection: 'row', alignItems: 'center', marginBottom: 7 },
-  eyebrowDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#2BA77A', marginRight: 7 },
-  eyebrowText: { color: '#248266', fontSize: 10, fontWeight: '800', letterSpacing: 1.05 },
-  headerTitle: { color: '#203247', fontSize: 30, fontWeight: '800', letterSpacing: -0.6 },
-  headerSub: { color: '#728094', fontSize: 13, lineHeight: 19, marginTop: 4, maxWidth: 270 },
-  countCard: { width: 68, height: 70, backgroundColor: '#E1F3ED', borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
-  countNumber: { fontSize: 23, fontWeight: '800', color: '#20785F' },
-  countLabel: { fontSize: 8, fontWeight: '800', letterSpacing: 1, color: '#548B79', marginTop: 2 },
-  searchWrap: { minHeight: 50, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 15, borderWidth: 1, borderColor: '#E5EAF0', paddingHorizontal: 14, marginBottom: 13, shadowColor: '#243B53', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
-  searchInput: { flex: 1, color: '#203247', fontSize: 14, paddingVertical: 12, marginLeft: 10, outlineStyle: 'none' },
+  eyebrowDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#F46352', marginRight: 7 },
+  eyebrowText: { color: '#F46352', fontSize: 10, fontWeight: '800', letterSpacing: 1.05 },
+  headerTitle: { color: '#481B25', fontSize: 30, fontWeight: '800', letterSpacing: -0.6 },
+  headerSub: { color: '#8B7468', fontSize: 13, lineHeight: 19, marginTop: 4, maxWidth: 270 },
+  countCard: { width: 68, height: 70, backgroundColor: '#FCE3D9', borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  countNumber: { fontSize: 23, fontWeight: '800', color: '#F46352' },
+  countLabel: { fontSize: 8, fontWeight: '800', letterSpacing: 1, color: '#481B25', marginTop: 2 },
+  searchWrap: { minHeight: 50, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 15, borderWidth: 1, borderColor: '#F5EDE6', paddingHorizontal: 14, marginBottom: 13, shadowColor: '#481B25', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
+  searchInput: { flex: 1, color: '#481B25', fontSize: 14, paddingVertical: 12, marginLeft: 10, outlineStyle: 'none' },
   filtersRow: { flexDirection: 'row', gap: 8, marginBottom: 18 },
-  filterPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#E9EDF3' },
-  filterPillSelected: { backgroundColor: '#284A62' },
-  filterText: { fontSize: 12, fontWeight: '700', color: '#6E7D8E' },
+  filterPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F5EDE6' },
+  filterPillSelected: { backgroundColor: '#481B25' },
+  filterText: { fontSize: 12, fontWeight: '700', color: '#8B7468' },
   filterTextSelected: { color: '#fff' },
   sectionLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },
-  sectionLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: '#7A8798' },
-  resultCount: { fontSize: 11, color: '#8A96A5', fontWeight: '600' },
-  cardShell: { flexDirection: 'row', overflow: 'hidden', borderRadius: 18, backgroundColor: '#fff', marginBottom: 11, borderWidth: 1, borderColor: '#E7ECF1', shadowColor: '#1D354C', shadowOpacity: 0.055, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  sectionLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: '#8B7468' },
+  resultCount: { fontSize: 11, color: '#8B7468', fontWeight: '600' },
+  cardShell: { flexDirection: 'row', overflow: 'hidden', borderRadius: 18, backgroundColor: '#fff', marginBottom: 11, borderWidth: 1, borderColor: '#F5EDE6', shadowColor: '#481B25', shadowOpacity: 0.055, shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
   cardAccent: { width: 4 },
   cardContent: { flex: 1, padding: 13 },
   cardTopRow: { flexDirection: 'row', alignItems: 'center' },
   studentMeta: { flex: 1, marginLeft: 11, marginRight: 6 },
-  studentName: { fontSize: 15, fontWeight: '800', color: '#24364A' },
-  courseText: { color: '#748295', fontSize: 12, marginTop: 3 },
-  sessionsText: { color: '#21816A', fontSize: 10, fontWeight: '700', marginTop: 5 },
+  studentName: { fontSize: 15, fontWeight: '800', color: '#481B25' },
+  courseText: { color: '#8B7468', fontSize: 12, marginTop: 3 },
+  sessionsText: { color: '#F46352', fontSize: 10, fontWeight: '700', marginTop: 5 },
   statusBadge: { borderRadius: 20, paddingHorizontal: 9, paddingVertical: 5, alignSelf: 'flex-start' },
   statusText: { fontSize: 10, fontWeight: '800' },
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 13, paddingTop: 11, borderTopWidth: 1, borderTopColor: '#F0F2F5' },
-  recordButton: { flex: 1, minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, backgroundColor: '#EEF2F6' },
-  recordButtonText: { color: '#40556C', fontSize: 11, fontWeight: '700' },
-  messageButton: { flex: 1, minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, backgroundColor: '#25836C' },
-  restoreMessageButton: { backgroundColor: '#5F6D80' },
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 13, paddingTop: 11, borderTopWidth: 1, borderTopColor: '#FFF8F2' },
+  recordButton: { flex: 1, minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, backgroundColor: '#FFF8F2' },
+  recordButtonText: { color: '#481B25', fontSize: 11, fontWeight: '700' },
+  messageButton: { flex: 1, minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, backgroundColor: '#F46352' },
+  restoreMessageButton: { backgroundColor: '#481B25' },
   messageButtonText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  archiveButton: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F6F8' },
-  emptyCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#E7ECF1', padding: 24, marginTop: 8 },
-  emptyIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E3F4EE', marginBottom: 12 },
-  emptyTitle: { color: '#2C3E50', fontWeight: '800', fontSize: 15, textAlign: 'center' },
-  emptyText: { color: '#788698', textAlign: 'center', fontSize: 12, lineHeight: 18, marginTop: 6 },
-  retryButton: { backgroundColor: '#25836C', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9, marginTop: 14 },
+  archiveButton: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF8F2' },
+  emptyCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#F5EDE6', padding: 24, marginTop: 8 },
+  emptyIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FCE3D9', marginBottom: 12 },
+  emptyTitle: { color: '#481B25', fontWeight: '800', fontSize: 15, textAlign: 'center' },
+  emptyText: { color: '#8B7468', textAlign: 'center', fontSize: 12, lineHeight: 18, marginTop: 6 },
+  retryButton: { backgroundColor: '#F46352', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9, marginTop: 14 },
   retryButtonText: { color: '#fff', fontWeight: '800', fontSize: 12 },
 });
 

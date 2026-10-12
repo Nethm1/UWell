@@ -2,9 +2,8 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
-import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { View, StyleSheet } from 'react-native';
+import FloatingTabBar from './FloatingTabBar';
 import DashboardScreen from '../screens/counselor/DashboardScreen';
 import AppointmentsScreen from '../screens/counselor/AppointmentsScreen';
 import StudentListScreen from '../screens/counselor/StudentListScreen';
@@ -64,64 +63,19 @@ const ProfileStackScreen = () => (
   </ProfileStack.Navigator>
 );
 
-type TabIconProps = { focused: boolean; color: string; size: number };
-
-const tabIconMap: Record<string, (props: TabIconProps) => React.ReactElement> = {
-  Dashboard: ({ focused, color }) => (
-    <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />
-  ),
-  Appointments: ({ focused, color }) => (
-    <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={22} color={color} />
-  ),
-  Students: ({ focused, color }) => (
-    <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />
-  ),
-  Messages: ({ focused, color }) => (
-    <Ionicons name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} size={22} color={color} />
-  ),
-  Profile: ({ focused, color }) => (
-    <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
-  ),
-};
-
 const CounselorNavigator = () => {
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const narrowScreen = width < 360;
-
   return (
     <View style={styles.container}>
       <Tab.Navigator
-        screenOptions={({ route }) => ({
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={() => ({
           headerShown: false,
-          tabBarIcon: (props) => {
-            const IconComponent = tabIconMap[route.name];
-            return IconComponent ? IconComponent(props) : null;
-          },
-          tabBarActiveTintColor: '#0865D9',
-          tabBarInactiveTintColor: colors.textSecondary,
-          tabBarStyle: {
-            backgroundColor: colors.white,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            height: 58 + Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 6),
-            paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 6),
-            paddingTop: 6,
-          },
-          tabBarItemStyle: { paddingHorizontal: 0 },
-          tabBarLabelStyle: {
-            fontSize: narrowScreen ? 9 : 10,
-            fontWeight: '500',
-            marginTop: 2,
-          },
+          tabBarActiveTintColor: '#F46352',
+          tabBarInactiveTintColor: '#8B7468',
         })}
       >
         <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: 'Home' }} />
-        <Tab.Screen
-          name="Appointments"
-          component={AppointmentsStackScreen}
-          options={{ tabBarBadge: undefined }}
-        />
+        <Tab.Screen name="Appointments" component={AppointmentsStackScreen} />
         <Tab.Screen name="Students" component={StudentsStackScreen} />
         <Tab.Screen name="Messages" component={MessagesStackScreen} />
         <Tab.Screen

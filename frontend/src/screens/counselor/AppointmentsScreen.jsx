@@ -305,14 +305,14 @@ const AppointmentsScreen = ({ navigation }) => {
   const renderItem = ({ item }) => {
     const cardId = item.id || item._id;
     const tone = item.status === 'Pending'
-      ? { bg: '#FFF1D6', text: '#9A5B00', accent: '#F4A62A' }
+      ? { bg: '#FCE3D9', text: '#F46352', accent: '#F46352' }
       : item.status === 'Confirmed'
-        ? { bg: '#DDF5EC', text: '#177957', accent: '#2BA77A' }
+        ? { bg: '#FCE3D9', text: '#F46352', accent: '#F46352' }
         : item.status === 'Completed'
-          ? { bg: '#E9E7FF', text: '#5953AD', accent: '#7971D7' }
+          ? { bg: '#FCE3D9', text: '#481B25', accent: '#F46352' }
           : item.status === 'Declined'
-            ? { bg: '#FFF0EF', text: '#A3444B', accent: '#C9553F' }
-            : { bg: '#EEF0F5', text: '#687386', accent: '#94A0B2' };
+            ? { bg: '#FCE3D9', text: '#481B25', accent: '#481B25' }
+            : { bg: '#F5EDE6', text: '#8B7468', accent: '#8B7468' };
 
     return (
       <View style={[styles.card, item.status === 'Pending' && styles.pendingCard]}>
@@ -341,17 +341,17 @@ const AppointmentsScreen = ({ navigation }) => {
                 <Text style={[styles.statusText, { color: tone.text }]}>{item.status || 'Pending'}</Text>
               </View>
               {updatingId === cardId
-                ? <View style={styles.moreButton}><ActivityIndicator size="small" color="#3973B9" /></View>
+                ? <View style={styles.moreButton}><ActivityIndicator size="small" color="#F46352" /></View>
                 : <TouchableOpacity style={styles.moreButton} onPress={() => setActionModal({ type: 'menu', appointment: item })} accessibilityRole="button" accessibilityLabel={`Appointment actions for ${item.studentName || 'student'}`}>
-                  <Feather name="more-vertical" size={19} color="#62768B" />
+                  <Feather name="more-vertical" size={19} color="#481B25" />
                 </TouchableOpacity>}
             </View>
           </View>
 
           <View style={styles.detailsRow}>
-            <View style={styles.detailLine}><Feather name="calendar" size={13} color="#668095" /><Text style={styles.detailText}>{item.date || 'Date not set'} · {item.time || 'Time not set'}</Text></View>
-            <View style={styles.detailLine}><Feather name="clock" size={13} color="#668095" /><Text style={styles.detailText}>{item.duration || 30} min · {item.sessionType || 'Mode not set'}</Text></View>
-            <View style={styles.detailLine}><Feather name="map-pin" size={13} color="#668095" /><Text style={styles.detailText}>{item.location && item.location !== 'Online Session' ? item.location : item.sessionType === 'Online' ? 'Online session' : 'Location not specified'}</Text></View>
+            <View style={styles.detailLine}><Feather name="calendar" size={13} color="#8B7468" /><Text style={styles.detailText}>{item.date || 'Date not set'} · {item.time || 'Time not set'}</Text></View>
+            <View style={styles.detailLine}><Feather name="clock" size={13} color="#8B7468" /><Text style={styles.detailText}>{item.duration || 30} min · {item.sessionType || 'Mode not set'}</Text></View>
+            <View style={styles.detailLine}><Feather name="map-pin" size={13} color="#8B7468" /><Text style={styles.detailText}>{item.location && item.location !== 'Online Session' ? item.location : item.sessionType === 'Online' ? 'Online session' : 'Location not specified'}</Text></View>
             {!!item.notes && <Text style={styles.bookingNote} numberOfLines={2}>Reason / notes: {item.notes}</Text>}
           </View>
 
@@ -384,7 +384,7 @@ const AppointmentsScreen = ({ navigation }) => {
                   onPress={() => handleViewLocation(item)}
                   accessibilityLabel="View meeting location"
                 >
-                  <Feather name="map-pin" size={14} color="#5A3E8A" />
+                  <Feather name="map-pin" size={14} color="#481B25" />
                   <Text style={styles.locationBtnText}>
                     {item.location && item.location !== 'Online Session' ? `📍 ${item.location}` : '📍 View Location'}
                   </Text>
@@ -403,7 +403,7 @@ const AppointmentsScreen = ({ navigation }) => {
                 accessibilityRole="button"
                 accessibilityLabel={`Decline the request from ${item.studentName || 'this student'}`}
               >
-                <Feather name="x" size={15} color="#A3444B" />
+                <Feather name="x" size={15} color="#481B25" />
                 <Text style={styles.declineBtnText}>Decline request</Text>
               </TouchableOpacity>
 
@@ -433,7 +433,7 @@ const AppointmentsScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F4F7FB" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFF8F2" />
       <Animated.View style={[styles.container, { opacity: fade }]}>
         <FlatList
           data={filteredAppointments}
@@ -478,8 +478,8 @@ const AppointmentsScreen = ({ navigation }) => {
             </View>
             <View style={styles.calendarControls}>
               <TouchableOpacity style={styles.todayButton} onPress={() => { const now = new Date(); setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1)); setSelectedDate(now); setActiveFilter('Today'); }} accessibilityRole="button"><Text style={styles.todayButtonText}>Today</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.monthButton} onPress={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} accessibilityLabel="Previous month"><Feather name="chevron-left" size={18} color="#51677D" /></TouchableOpacity>
-              <TouchableOpacity style={styles.monthButton} onPress={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))} accessibilityLabel="Next month"><Feather name="chevron-right" size={18} color="#51677D" /></TouchableOpacity>
+              <TouchableOpacity style={styles.monthButton} onPress={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} accessibilityLabel="Previous month"><Feather name="chevron-left" size={18} color="#481B25" /></TouchableOpacity>
+              <TouchableOpacity style={styles.monthButton} onPress={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))} accessibilityLabel="Next month"><Feather name="chevron-right" size={18} color="#481B25" /></TouchableOpacity>
             </View>
           </View>
           <View style={styles.calendarGrid}>
@@ -495,9 +495,9 @@ const AppointmentsScreen = ({ navigation }) => {
 
         <View style={styles.filtersCard}>
           <View style={styles.searchWrap}>
-            <Feather name="search" size={16} color="#8793A3" />
-            <TextInput value={searchQuery} onChangeText={setSearchQuery} placeholder="Search student, ID, or reason" placeholderTextColor="#97A1AF" style={styles.searchInput} accessibilityLabel="Search appointments" />
-            {!!searchQuery && <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Clear search"><Feather name="x-circle" size={16} color="#8793A3" /></TouchableOpacity>}
+            <Feather name="search" size={16} color="#8B7468" />
+            <TextInput value={searchQuery} onChangeText={setSearchQuery} placeholder="Search student, ID, or reason" placeholderTextColor="#8B7468" style={styles.searchInput} accessibilityLabel="Search appointments" />
+            {!!searchQuery && <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityLabel="Clear search"><Feather name="x-circle" size={16} color="#8B7468" /></TouchableOpacity>}
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRows}>
             {STATUS_FILTERS.map((filter) => <TouchableOpacity key={filter} style={[styles.filterChip, statusFilter === filter && styles.filterChipSelected]} onPress={() => setStatusFilter(filter)}><Text style={[styles.filterChipText, statusFilter === filter && styles.filterChipTextSelected]}>{filter}</Text></TouchableOpacity>)}
@@ -517,7 +517,7 @@ const AppointmentsScreen = ({ navigation }) => {
           onRefresh={loadAppointments}
           ListEmptyComponent={(
             <View style={styles.emptyCard}>
-              {loading ? <ActivityIndicator color="#3973B9" /> : <View style={styles.emptyIcon}><Feather name={loadError ? 'cloud-off' : 'calendar'} size={24} color="#54728D" /></View>}
+              {loading ? <ActivityIndicator color="#F46352" /> : <View style={styles.emptyIcon}><Feather name={loadError ? 'cloud-off' : 'calendar'} size={24} color="#481B25" /></View>}
               <Text style={styles.emptyTitle}>{loading ? 'Loading appointments' : loadError ? 'Appointments unavailable' : `No ${activeFilter.toLowerCase()} appointments`}</Text>
               {!loading && <Text style={styles.emptyText}>{loadError || 'Student bookings appear here. Accept or decline pending requests; message confirmed students and mark sessions complete when finished.'}</Text>}
               {!!loadError && <TouchableOpacity style={styles.retryBtn} onPress={loadAppointments}><Text style={styles.retryText}>Try again</Text></TouchableOpacity>}
@@ -531,7 +531,7 @@ const AppointmentsScreen = ({ navigation }) => {
               <View style={styles.modalHeadingRow}>
                 <CounselorBackButton navigation={navigation} onPress={handleAppointmentModalBack} style={styles.modalBackButton} />
                 <Text style={styles.modalTitle}>{actionModal?.type === 'decline' ? 'Decline appointment' : actionModal?.type === 'reschedule' ? 'Reschedule appointment' : actionModal?.type === 'details' ? 'Appointment details' : 'Appointment actions'}</Text>
-                <TouchableOpacity onPress={() => !updatingId && setActionModal(null)} accessibilityLabel="Close dialog"><Feather name="x" size={20} color="#687B8F" /></TouchableOpacity>
+                <TouchableOpacity onPress={() => !updatingId && setActionModal(null)} accessibilityLabel="Close dialog"><Feather name="x" size={20} color="#8B7468" /></TouchableOpacity>
               </View>
               {actionModal?.type === 'menu' && (
                 <ScrollView style={styles.menuScroll}>
@@ -545,9 +545,9 @@ const AppointmentsScreen = ({ navigation }) => {
                     ['message', 'Message student', 'message-circle'],
                   ].map(([action, label, icon]) => (
                     <TouchableOpacity key={action} style={styles.menuAction} onPress={() => action === 'call' ? (setActionModal(null), startVideoSession(actionModal.appointment)) : runMenuAction(action, actionModal.appointment)} disabled={!!updatingId}>
-                      <Feather name={icon} size={16} color={action === 'decline' || action === 'cancel' ? '#A3444B' : '#3973B9'} />
+                      <Feather name={icon} size={16} color={action === 'decline' || action === 'cancel' ? '#481B25' : '#F46352'} />
                       <Text style={[styles.menuActionText, (action === 'decline' || action === 'cancel') && styles.menuDangerText]}>{label}</Text>
-                      <Feather name="chevron-right" size={16} color="#98A5B3" />
+                      <Feather name="chevron-right" size={16} color="#8B7468" />
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -564,7 +564,7 @@ const AppointmentsScreen = ({ navigation }) => {
                     ['video', 'Mode', actionModal.appointment.sessionType || 'Not set'],
                     ['check-circle', 'Status', actionModal.appointment.status || 'Pending'],
                     ['map-pin', 'Location', actionModal.appointment.location || (actionModal.appointment.sessionType === 'Online' ? 'Online session' : 'Not set')],
-                  ].map(([icon, label, value]) => <View key={label} style={styles.detailsModalRow}><Feather name={icon} size={15} color="#668095" /><View style={styles.detailsModalCopy}><Text style={styles.detailsModalLabel}>{label}</Text><Text style={styles.detailsModalValue}>{value}</Text></View></View>)}
+                  ].map(([icon, label, value]) => <View key={label} style={styles.detailsModalRow}><Feather name={icon} size={15} color="#8B7468" /><View style={styles.detailsModalCopy}><Text style={styles.detailsModalLabel}>{label}</Text><Text style={styles.detailsModalValue}>{value}</Text></View></View>)}
                   <Text style={styles.detailsModalLabel}>Reason / notes</Text>
                   <Text style={styles.detailsModalValue}>{actionModal.appointment.notes || actionModal.appointment.reason || 'No notes provided.'}</Text>
                   <TouchableOpacity style={styles.modalSave} onPress={() => runMenuAction('message', actionModal.appointment)}><Text style={styles.modalSaveText}>Message student</Text></TouchableOpacity>
@@ -586,7 +586,7 @@ const AppointmentsScreen = ({ navigation }) => {
                 <>
                   <Text style={styles.modalHint}>Enter a date and choose one of your available, unbooked time slots.</Text>
                   {!!availabilityError && <Text style={styles.modalError}>{availabilityError}</Text>}
-                  {availabilityLoading && <View style={styles.availabilityLoading}><ActivityIndicator size="small" color="#3973B9" /><Text style={styles.availabilityLoadingText}>Loading available dates…</Text></View>}
+                  {availabilityLoading && <View style={styles.availabilityLoading}><ActivityIndicator size="small" color="#F46352" /><Text style={styles.availabilityLoadingText}>Loading available dates…</Text></View>}
                   <Text style={styles.modalLabel}>Choose a date</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timeChoices}>
                     {dateChoices.map((choice) => <TouchableOpacity key={choice.date} style={[styles.timeChoice, rescheduleDate === choice.date && styles.timeChoiceSelected]} onPress={() => { setRescheduleDate(choice.date); setRescheduleTime(''); }}><Text style={[styles.timeChoiceText, rescheduleDate === choice.date && styles.timeChoiceTextSelected]}>{choice.label}</Text></TouchableOpacity>)}
@@ -614,128 +614,128 @@ const AppointmentsScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F4F7FB' },
+  safeArea: { flex: 1, backgroundColor: '#FFF8F2' },
   container: { flex: 1, paddingHorizontal: 18, paddingTop: 15 },
   backButton: { marginLeft: -6, marginBottom: 2 },
   headingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  headingIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: '#3973B9', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  headerTitle: { fontSize: 25, fontWeight: '800', color: '#203247' },
-  headerSub: { color: '#748295', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  headingIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: '#F46352', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  headerTitle: { fontSize: 25, fontWeight: '800', color: '#481B25' },
+  headerSub: { color: '#8B7468', fontSize: 12, lineHeight: 17, marginTop: 2 },
   tabsScroll: { flexGrow: 0, marginBottom: 10 },
-  tabsContainer: { flexDirection: 'row', backgroundColor: '#E9EEF5', borderRadius: 14, padding: 4, gap: 3 },
+  tabsContainer: { flexDirection: 'row', backgroundColor: '#F5EDE6', borderRadius: 14, padding: 4, gap: 3 },
   tabBtn: { minWidth: 76, minHeight: 38, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 10 },
-  tabBtnActive: { backgroundColor: '#fff', shadowColor: '#253B50', shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  tabText: { fontSize: 12, fontWeight: '700', color: '#758397' },
-  tabTextActive: { color: '#29475F' },
-  tabCount: { color: '#8A96A5', fontSize: 10, fontWeight: '800' },
-  tabCountActive: { color: '#3973B9' },
-  calendarCard: { backgroundColor: '#fff', borderRadius: 17, borderWidth: 1, borderColor: '#E6EBF1', padding: 13, marginBottom: 10 },
+  tabBtnActive: { backgroundColor: '#fff', shadowColor: '#481B25', shadowOpacity: 0.08, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  tabText: { fontSize: 12, fontWeight: '700', color: '#8B7468' },
+  tabTextActive: { color: '#481B25' },
+  tabCount: { color: '#8B7468', fontSize: 10, fontWeight: '800' },
+  tabCountActive: { color: '#F46352' },
+  calendarCard: { backgroundColor: '#fff', borderRadius: 17, borderWidth: 1, borderColor: '#F5EDE6', padding: 13, marginBottom: 10 },
   calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  calendarTitle: { color: '#26394D', fontWeight: '800', fontSize: 15 },
-  calendarSubtitle: { color: '#8793A3', fontSize: 10, marginTop: 3 },
+  calendarTitle: { color: '#481B25', fontWeight: '800', fontSize: 15 },
+  calendarSubtitle: { color: '#8B7468', fontSize: 10, marginTop: 3 },
   calendarControls: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  todayButton: { backgroundColor: '#EAF2FC', paddingHorizontal: 10, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  todayButtonText: { color: '#3973B9', fontSize: 10, fontWeight: '800' },
-  monthButton: { width: 30, height: 30, borderRadius: 9, backgroundColor: '#F4F6F9', alignItems: 'center', justifyContent: 'center' },
+  todayButton: { backgroundColor: '#FCE3D9', paddingHorizontal: 10, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  todayButtonText: { color: '#F46352', fontSize: 10, fontWeight: '800' },
+  monthButton: { width: 30, height: 30, borderRadius: 9, backgroundColor: '#FFF8F2', alignItems: 'center', justifyContent: 'center' },
   calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  weekdayLabel: { width: '14.2857%', textAlign: 'center', color: '#8A96A5', fontSize: 10, fontWeight: '800', paddingVertical: 6 },
+  weekdayLabel: { width: '14.2857%', textAlign: 'center', color: '#8B7468', fontSize: 10, fontWeight: '800', paddingVertical: 6 },
   dayCell: { width: '14.2857%', height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 9, marginVertical: 1 },
-  dayText: { color: '#52677D', fontSize: 11, fontWeight: '600' },
+  dayText: { color: '#8B7468', fontSize: 11, fontWeight: '600' },
   outsideDay: { opacity: 0.45 },
-  outsideDayText: { color: '#9AA5B2' },
-  dayWithBooking: { backgroundColor: '#EAF5F1' },
-  selectedDay: { backgroundColor: '#3973B9' },
+  outsideDayText: { color: '#8B7468' },
+  dayWithBooking: { backgroundColor: '#FCE3D9' },
+  selectedDay: { backgroundColor: '#F46352' },
   selectedDayText: { color: '#fff', fontWeight: '800' },
-  filtersCard: { backgroundColor: '#fff', borderRadius: 15, borderWidth: 1, borderColor: '#E6EBF1', padding: 10, marginBottom: 10 },
-  searchWrap: { minHeight: 41, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7F9FC', borderRadius: 11, borderWidth: 1, borderColor: '#E6EBF1', paddingHorizontal: 11, marginBottom: 8 },
-  searchInput: { flex: 1, color: '#203247', fontSize: 12, paddingVertical: 8, marginLeft: 8, outlineStyle: 'none' },
+  filtersCard: { backgroundColor: '#fff', borderRadius: 15, borderWidth: 1, borderColor: '#F5EDE6', padding: 10, marginBottom: 10 },
+  searchWrap: { minHeight: 41, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF8F2', borderRadius: 11, borderWidth: 1, borderColor: '#F5EDE6', paddingHorizontal: 11, marginBottom: 8 },
+  searchInput: { flex: 1, color: '#481B25', fontSize: 12, paddingVertical: 8, marginLeft: 8, outlineStyle: 'none' },
   filterRows: { alignItems: 'center', gap: 6, paddingVertical: 2 },
-  filterChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: '#F0F3F7' },
-  filterChipSelected: { backgroundColor: '#284A62' },
-  filterChipText: { color: '#6E7D8E', fontSize: 10, fontWeight: '700' },
+  filterChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: '#F5EDE6' },
+  filterChipSelected: { backgroundColor: '#481B25' },
+  filterChipText: { color: '#8B7468', fontSize: 10, fontWeight: '700' },
   filterChipTextSelected: { color: '#fff' },
-  filterDivider: { width: 1, height: 22, backgroundColor: '#DCE3EA', marginHorizontal: 3 },
+  filterDivider: { width: 1, height: 22, backgroundColor: '#F5EDE6', marginHorizontal: 3 },
   filterFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 7 },
-  resultLabel: { color: '#8A96A5', fontSize: 10, fontWeight: '600' },
-  clearFiltersText: { color: '#3973B9', fontSize: 10, fontWeight: '800' },
+  resultLabel: { color: '#8B7468', fontSize: 10, fontWeight: '600' },
+  clearFiltersText: { color: '#F46352', fontSize: 10, fontWeight: '800' },
   listContent: { flexGrow: 1, paddingBottom: 10 },
-  card: { flexDirection: 'row', overflow: 'hidden', backgroundColor: '#fff', borderRadius: 17, marginBottom: 11, borderWidth: 1, borderColor: '#E6EBF1', shadowColor: '#1D354C', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
-  pendingCard: { borderColor: '#F2D89F' },
+  card: { flexDirection: 'row', overflow: 'hidden', backgroundColor: '#fff', borderRadius: 17, marginBottom: 11, borderWidth: 1, borderColor: '#F5EDE6', shadowColor: '#481B25', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  pendingCard: { borderColor: '#FCE3D9' },
   cardAccent: { width: 4 },
   cardContent: { flex: 1, padding: 13 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   studentInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', marginRight: 6 },
   nameBlock: { flex: 1, marginLeft: 10 },
-  studentName: { fontSize: 14, fontWeight: '800', color: '#26394D' },
-  courseText: { fontSize: 11, color: '#788698', marginTop: 3 },
-  studentIdText: { fontSize: 10, color: '#8895A3', marginTop: 2 },
+  studentName: { fontSize: 14, fontWeight: '800', color: '#481B25' },
+  courseText: { fontSize: 11, color: '#8B7468', marginTop: 3 },
+  studentIdText: { fontSize: 10, color: '#8B7468', marginTop: 2 },
   cardHeaderActions: { alignItems: 'flex-end', gap: 3 },
   moreButton: { width: 30, height: 27, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   statusBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 14 },
   statusText: { fontSize: 10, fontWeight: '800' },
-  detailsRow: { paddingTop: 10, marginTop: 10, borderTopWidth: 1, borderTopColor: '#EFF2F5' },
+  detailsRow: { paddingTop: 10, marginTop: 10, borderTopWidth: 1, borderTopColor: '#F5EDE6' },
   detailLine: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 4 },
-  detailText: { fontSize: 11, color: '#687B8F' },
-  bookingNote: { fontSize: 11, lineHeight: 16, color: '#687B8F', marginTop: 4 },
+  detailText: { fontSize: 11, color: '#8B7468' },
+  bookingNote: { fontSize: 11, lineHeight: 16, color: '#8B7468', marginTop: 4 },
   actionsRow: { flexDirection: 'row', gap: 8, marginTop: 11 },
   actionBtn: { flex: 1, minHeight: 36, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  acceptBtn: { backgroundColor: '#25836C' },
+  acceptBtn: { backgroundColor: '#F46352' },
   acceptBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  declineBtn: { backgroundColor: '#FFF0EF', borderWidth: 1, borderColor: '#F5D0CC' },
-  declineBtnText: { color: '#A3444B', fontSize: 11, fontWeight: '800' },
-  rescheduleBtn: { backgroundColor: '#EAF2FC' },
-  rescheduleBtnText: { color: '#3973B9', fontSize: 11, fontWeight: '800' },
-  messageBtn: { backgroundColor: '#EAF2FC' },
-  messageBtnText: { color: '#3973B9', fontSize: 11, fontWeight: '800' },
-  completeBtn: { backgroundColor: '#DDF5EC' },
-  completeBtnText: { color: '#177957', fontSize: 11, fontWeight: '800' },
-  videoSessionBtn: { backgroundColor: '#3973B9', marginBottom: 0, minHeight: 40 },
+  declineBtn: { backgroundColor: '#FCE3D9', borderWidth: 1, borderColor: '#FCE3D9' },
+  declineBtnText: { color: '#481B25', fontSize: 11, fontWeight: '800' },
+  rescheduleBtn: { backgroundColor: '#FCE3D9' },
+  rescheduleBtnText: { color: '#F46352', fontSize: 11, fontWeight: '800' },
+  messageBtn: { backgroundColor: '#FCE3D9' },
+  messageBtnText: { color: '#F46352', fontSize: 11, fontWeight: '800' },
+  completeBtn: { backgroundColor: '#FCE3D9' },
+  completeBtnText: { color: '#F46352', fontSize: 11, fontWeight: '800' },
+  videoSessionBtn: { backgroundColor: '#F46352', marginBottom: 0, minHeight: 40 },
   disabledVideoBtn: { opacity: 0.55 },
   videoSessionBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  scheduledJoinBtn: { backgroundColor: '#EAF2FC', minHeight: 36 },
-  scheduledJoinText: { color: '#3973B9', fontSize: 10, fontWeight: '800' },
-  locationBtn: { backgroundColor: '#F0EBFF', borderWidth: 1, borderColor: '#D4C5F5' },
-  locationBtnText: { color: '#5A3E8A', fontSize: 11, fontWeight: '800', flexShrink: 1 },
-  emptyCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#E6EBF1', padding: 24, marginTop: 8 },
-  emptyIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#EAF2FC', alignItems: 'center', justifyContent: 'center', marginBottom: 11 },
-  emptyTitle: { color: '#26394D', fontSize: 14, fontWeight: '800', textAlign: 'center' },
-  emptyText: { color: '#788698', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
-  retryBtn: { backgroundColor: '#3973B9', paddingHorizontal: 15, paddingVertical: 9, borderRadius: 10, marginTop: 12 },
+  scheduledJoinBtn: { backgroundColor: '#FCE3D9', minHeight: 36 },
+  scheduledJoinText: { color: '#F46352', fontSize: 10, fontWeight: '800' },
+  locationBtn: { backgroundColor: '#FCE3D9', borderWidth: 1, borderColor: '#FCE3D9' },
+  locationBtnText: { color: '#481B25', fontSize: 11, fontWeight: '800', flexShrink: 1 },
+  emptyCard: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#F5EDE6', padding: 24, marginTop: 8 },
+  emptyIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FCE3D9', alignItems: 'center', justifyContent: 'center', marginBottom: 11 },
+  emptyTitle: { color: '#481B25', fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  emptyText: { color: '#8B7468', fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 6 },
+  retryBtn: { backgroundColor: '#F46352', paddingHorizontal: 15, paddingVertical: 9, borderRadius: 10, marginTop: 12 },
   retryText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   modalBackdrop: { flex: 1, justifyContent: 'center', padding: 22, backgroundColor: 'rgba(22, 37, 52, 0.48)' },
   modalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 19, maxHeight: '85%' },
   modalHeadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modalBackButton: { marginLeft: -8 },
-  modalTitle: { flex: 1, color: '#203247', fontSize: 18, fontWeight: '800' },
+  modalTitle: { flex: 1, color: '#481B25', fontSize: 18, fontWeight: '800' },
   menuScroll: { marginTop: 12, maxHeight: 420 },
-  menuAction: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 11, borderBottomWidth: 1, borderBottomColor: '#EEF1F4', paddingHorizontal: 4 },
-  menuActionText: { flex: 1, color: '#40556C', fontSize: 13, fontWeight: '700' },
-  menuDangerText: { color: '#A3444B' },
+  menuAction: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 11, borderBottomWidth: 1, borderBottomColor: '#F5EDE6', paddingHorizontal: 4 },
+  menuActionText: { flex: 1, color: '#481B25', fontSize: 13, fontWeight: '700' },
+  menuDangerText: { color: '#481B25' },
   detailsModalBody: { marginTop: 12 },
-  detailsStudentName: { color: '#26394D', fontSize: 16, fontWeight: '800' },
-  detailModalDivider: { height: 1, backgroundColor: '#E9EDF2', marginVertical: 13 },
+  detailsStudentName: { color: '#481B25', fontSize: 16, fontWeight: '800' },
+  detailModalDivider: { height: 1, backgroundColor: '#F5EDE6', marginVertical: 13 },
   detailsModalRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   detailsModalCopy: { flex: 1 },
-  detailsModalLabel: { color: '#8793A3', fontSize: 10, fontWeight: '700', marginBottom: 2 },
-  detailsModalValue: { color: '#40556C', fontSize: 12, lineHeight: 17 },
-  modalHint: { color: '#748295', fontSize: 12, lineHeight: 18, marginTop: 10 },
-  modalLabel: { color: '#40556C', fontSize: 12, fontWeight: '700', marginTop: 15, marginBottom: 7 },
-  modalInput: { minHeight: 44, borderWidth: 1, borderColor: '#DDE4EC', borderRadius: 11, paddingHorizontal: 12, color: '#203247', backgroundColor: '#FBFCFD' },
+  detailsModalLabel: { color: '#8B7468', fontSize: 10, fontWeight: '700', marginBottom: 2 },
+  detailsModalValue: { color: '#481B25', fontSize: 12, lineHeight: 17 },
+  modalHint: { color: '#8B7468', fontSize: 12, lineHeight: 18, marginTop: 10 },
+  modalLabel: { color: '#481B25', fontSize: 12, fontWeight: '700', marginTop: 15, marginBottom: 7 },
+  modalInput: { minHeight: 44, borderWidth: 1, borderColor: '#F5EDE6', borderRadius: 11, paddingHorizontal: 12, color: '#481B25', backgroundColor: '#FFF8F2' },
   reasonInput: { minHeight: 90, paddingTop: 11, textAlignVertical: 'top', marginTop: 14 },
-  modalError: { color: '#A3444B', fontSize: 12, marginTop: 10 },
+  modalError: { color: '#481B25', fontSize: 12, marginTop: 10 },
   availabilityLoading: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
-  availabilityLoadingText: { color: '#748295', fontSize: 11 },
+  availabilityLoadingText: { color: '#8B7468', fontSize: 11 },
   timeChoices: { gap: 8, paddingVertical: 3 },
-  timeChoice: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#DDE4EC', backgroundColor: '#F7F9FC' },
-  timeChoiceSelected: { borderColor: '#3973B9', backgroundColor: '#EAF2FC' },
-  timeChoiceText: { color: '#607286', fontSize: 11, fontWeight: '700' },
-  timeChoiceTextSelected: { color: '#3973B9' },
+  timeChoice: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#F5EDE6', backgroundColor: '#FFF8F2' },
+  timeChoiceSelected: { borderColor: '#F46352', backgroundColor: '#FCE3D9' },
+  timeChoiceText: { color: '#481B25', fontSize: 11, fontWeight: '700' },
+  timeChoiceTextSelected: { color: '#F46352' },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 19 },
-  modalCancel: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#EEF2F6' },
-  modalCancelText: { color: '#52657A', fontSize: 12, fontWeight: '800' },
-  modalDecline: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#B84C54' },
+  modalCancel: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#FFF8F2' },
+  modalCancelText: { color: '#481B25', fontSize: 12, fontWeight: '800' },
+  modalDecline: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#481B25' },
   modalDeclineText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  modalSave: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#3973B9' },
+  modalSave: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#F46352' },
   modalSaveDisabled: { opacity: 0.5 },
   modalSaveText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 });

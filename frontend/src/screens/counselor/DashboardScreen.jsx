@@ -25,17 +25,17 @@ import { appointmentDateTime, formatCountdown } from '../../utils/counselorAppoi
 const C = {
   page: '#FFF8F2',
   white: '#FFFFFF',
-  ink: '#24232A',
-  muted: '#6F737E',
-  coral: '#EF6553',
-  coralDark: '#D94F40',
-  peach: '#FCE7DE',
-  peachSoft: '#FFF0EA',
-  line: '#F1E8E2',
-  green: '#28734D',
-  greenBg: '#E1F4E7',
-  amber: '#B96700',
-  amberBg: '#FFF0D8',
+  ink: '#481B25',
+  muted: '#8B7468',
+  coral: '#F46352',
+  coralDark: '#481B25',
+  peach: '#FCE3D9',
+  peachSoft: '#FFF8F2',
+  line: '#FFF8F2',
+  green: '#481B25',
+  greenBg: '#FCE3D9',
+  amber: '#F46352',
+  amberBg: '#FCE3D9',
 };
 
 const initialsFor = (name = '') => name
@@ -393,7 +393,7 @@ const DashboardScreen = ({ navigation }) => {
             <Text style={styles.staffBadge}>CLINICAL STAFF</Text>
             <Text style={styles.greeting}>{greetingForNow()}</Text>
             <Text style={[styles.nameLine, compact && styles.nameLineCompact]} numberOfLines={1} adjustsFontSizeToFit>
-              {firstName} <Ionicons name="partly-sunny-outline" size={compact ? 22 : 26} color="#EBA340" />
+              {firstName} <Ionicons name="partly-sunny-outline" size={compact ? 22 : 26} color="#F46352" />
             </Text>
             <Text style={[styles.welcomeText, compact && styles.welcomeTextCompact]}>Thank you for being here and supporting your students.</Text>
           </View>
@@ -456,8 +456,8 @@ const DashboardScreen = ({ navigation }) => {
                   value={callAvailable}
                   onValueChange={toggleCallAvailability}
                   disabled={availabilitySaving}
-                  trackColor={{ false: '#D7DCE2', true: '#A8D7B9' }}
-                  thumbColor={callAvailable ? C.green : '#8B929B'}
+                  trackColor={{ false: '#F5EDE6', true: '#FCE3D9' }}
+                  thumbColor={callAvailable ? C.green : '#8B7468'}
                   accessibilityLabel="Toggle availability for video calls"
                 />
               </View>
@@ -494,7 +494,7 @@ const DashboardScreen = ({ navigation }) => {
           <StatCard
             compact={compact}
             tone="amber"
-            icon={<Feather name="file-text" size={20} color="#DB7A13" />}
+            icon={<Feather name="file-text" size={20} color="#F46352" />}
             value={stats?.pendingRequests ?? 2}
             label="Notes to review"
           />
@@ -614,13 +614,13 @@ const DashboardScreen = ({ navigation }) => {
                     >
                       <View style={[
                         styles.notifIconWrap,
-                        isRescheduled && { backgroundColor: '#FFF3D6' },
-                        isCancelled && { backgroundColor: '#FDEAE8' },
+                        isRescheduled && { backgroundColor: '#FCE3D9' },
+                        isCancelled && { backgroundColor: '#FCE3D9' },
                       ]}>
                         <Ionicons
                           name={isRescheduled ? 'calendar-outline' : (isCancelled ? 'alert-circle-outline' : 'notifications-outline')}
                           size={18}
-                          color={isRescheduled ? '#B96700' : (isCancelled ? C.coralDark : C.coral)}
+                          color={isRescheduled ? '#F46352' : (isCancelled ? C.coralDark : C.coral)}
                         />
                       </View>
                       <View style={{ flex: 1 }}>
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
   topRowCompact: { marginBottom: 15 },
   greetingBlock: { flex: 1, paddingRight: 10 },
   staffBadge: { alignSelf: 'flex-start', backgroundColor: C.peach, color: C.coralDark, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, overflow: 'hidden', marginBottom: 11 },
-  greeting: { color: '#30333D', fontSize: 24, lineHeight: 29, fontWeight: '700' },
+  greeting: { color: '#481B25', fontSize: 24, lineHeight: 29, fontWeight: '700' },
   nameLine: { color: C.coralDark, fontSize: 31, lineHeight: 37, fontWeight: '800' },
   nameLineCompact: { fontSize: 27, lineHeight: 33 },
   weather: { fontSize: 26 },
@@ -675,17 +675,17 @@ const styles = StyleSheet.create({
   bellButtonCompact: { width: 42, height: 42, borderRadius: 21 },
   notificationCount: { position: 'absolute', right: -1, top: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: C.coral, alignItems: 'center', justifyContent: 'center' },
   notificationCountText: { color: C.white, fontSize: 11, fontWeight: '800' },
-  avatar: { backgroundColor: '#FCE1D7', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.white, overflow: 'hidden' },
+  avatar: { backgroundColor: '#FCE3D9', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.white, overflow: 'hidden' },
   avatarImage: { width: '100%', height: '100%' },
   avatarText: { color: C.coralDark, fontWeight: '800' },
-  onlineDot: { position: 'absolute', right: -1, bottom: 0, width: 15, height: 15, borderRadius: 8, backgroundColor: '#39B96B', borderWidth: 2, borderColor: C.white },
-  impactCard: { minHeight: 242, borderRadius: 25, backgroundColor: '#FBE3D8', overflow: 'hidden', marginBottom: 16, position: 'relative', justifyContent: 'center' },
+  onlineDot: { position: 'absolute', right: -1, bottom: 0, width: 15, height: 15, borderRadius: 8, backgroundColor: '#F46352', borderWidth: 2, borderColor: C.white },
+  impactCard: { minHeight: 242, borderRadius: 25, backgroundColor: '#FCE3D9', overflow: 'hidden', marginBottom: 16, position: 'relative', justifyContent: 'center' },
   impactCopy: { width: '63%', zIndex: 2, paddingVertical: 22, paddingLeft: 22, paddingRight: 4 },
   impactCardCompact: { minHeight: 232, borderRadius: 22 },
   impactCopyCompact: { width: '62%', paddingVertical: 17, paddingLeft: 15, paddingRight: 3 },
-  impactTitle: { color: '#421B25', fontSize: 25, lineHeight: 31, fontWeight: '800', marginBottom: 8 },
+  impactTitle: { color: '#481B25', fontSize: 25, lineHeight: 31, fontWeight: '800', marginBottom: 8 },
   impactTitleCompact: { fontSize: 21, lineHeight: 26, marginBottom: 6 },
-  impactSub: { color: '#796D70', fontSize: 14, lineHeight: 19, marginBottom: 15, maxWidth: 250 },
+  impactSub: { color: '#8B7468', fontSize: 14, lineHeight: 19, marginBottom: 15, maxWidth: 250 },
   impactSubCompact: { fontSize: 12, lineHeight: 16, marginBottom: 10 },
   supportCount: { alignSelf: 'flex-start', minWidth: 188, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.88)', borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12 },
   supportCountCompact: { width: '100%', minWidth: 0, paddingVertical: 6, paddingHorizontal: 7, borderRadius: 15 },
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
   availabilityIconCompact: { width: 52, height: 52, borderRadius: 26 },
   availabilityCopy: { flex: 1 },
   callAvailabilityRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  callAvailabilityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#A4AAB2' },
+  callAvailabilityDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#8B7468' },
   callAvailabilityDotOn: { backgroundColor: C.green },
   callAvailabilityText: { flex: 1, color: C.muted, fontSize: 11, fontWeight: '700' },
   availabilityTitle: { color: C.ink, fontSize: 19, fontWeight: '800', marginBottom: 3 },
@@ -729,10 +729,10 @@ const styles = StyleSheet.create({
   statCardCompact: { minHeight: 132, padding: 9, borderRadius: 18 },
   statIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: C.peachSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   statIconCompact: { width: 36, height: 36, borderRadius: 18 },
-  statIconAmber: { backgroundColor: '#FFF1DC' },
+  statIconAmber: { backgroundColor: '#FCE3D9' },
   statValue: { color: C.coral, fontSize: 25, lineHeight: 29, fontWeight: '800' },
   statValueCompact: { fontSize: 22, lineHeight: 26 },
-  statValueAmber: { color: '#DB7A13' },
+  statValueAmber: { color: '#F46352' },
   statLabel: { color: C.muted, fontSize: 11, lineHeight: 15, minHeight: 29 },
   statLabelCompact: { fontSize: 10, lineHeight: 13, minHeight: 27 },
   sparkline: { flexDirection: 'row', height: 22, alignItems: 'flex-end', gap: 4, marginTop: 5 },
@@ -768,21 +768,21 @@ const styles = StyleSheet.create({
   bottomSpace: { height: 12 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   notifSheet: { backgroundColor: C.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 },
-  notifHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F0ECE8' },
+  notifHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#FFF8F2' },
   notifTitle: { fontSize: 18, fontWeight: '800', color: C.ink },
   notifBadge: { backgroundColor: C.peach, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
   notifBadgeText: { fontSize: 11, fontWeight: '700', color: C.coralDark },
   markAllReadText: { fontSize: 12, fontWeight: '700', color: C.coral },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F5EFEA', alignItems: 'center', justifyContent: 'center' },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFF8F2', alignItems: 'center', justifyContent: 'center' },
   notifEmpty: { alignItems: 'center', paddingVertical: 40, gap: 8 },
   notifEmptyTitle: { fontSize: 16, fontWeight: '700', color: C.ink },
   notifEmptySub: { fontSize: 12, color: C.muted, textAlign: 'center', maxWidth: 240 },
-  notifItem: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 16, marginBottom: 8, backgroundColor: '#FAF7F5' },
-  notifItemUnread: { backgroundColor: '#FFF5F2', borderWidth: 1, borderColor: '#FCDCD5' },
+  notifItem: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 16, marginBottom: 8, backgroundColor: '#FFF8F2' },
+  notifItemUnread: { backgroundColor: '#FFF8F2', borderWidth: 1, borderColor: '#FCE3D9' },
   notifIconWrap: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.peach, alignItems: 'center', justifyContent: 'center' },
   notifItemTitle: { fontSize: 13, fontWeight: '600', color: C.ink },
   notifItemTitleBold: { fontWeight: '800', color: C.coralDark },
-  notifItemMsg: { fontSize: 12, color: '#555259', lineHeight: 17, marginTop: 2 },
+  notifItemMsg: { fontSize: 12, color: '#481B25', lineHeight: 17, marginTop: 2 },
   notifItemTime: { fontSize: 10, color: C.muted, marginTop: 4 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.coral },
   sessionChip: { backgroundColor: C.peach, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
