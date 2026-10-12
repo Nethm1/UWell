@@ -36,6 +36,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import CounselorBackButton from '../../components/navigation/CounselorBackButton';
 import { counselorService } from '../../services/counselorService';
 
 // ─── Screen width (used only for calendar cell sizing) ────────────────────
@@ -803,14 +804,7 @@ const AvailabilityScreen = ({ navigation }) => {
 
       {/* ── 1. Nav bar ──────────────────────────────────────────────── */}
       <View style={s.navBar}>
-        <TouchableOpacity
-          style={s.navBtn}
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-        >
-          <Feather name="chevron-left" size={22} color={colors.darkText} />
-        </TouchableOpacity>
+        <CounselorBackButton navigation={navigation} style={s.navBtn} />
 
         <TouchableOpacity style={s.navBtn} accessibilityLabel="Notifications">
           <Feather name="bell" size={19} color={colors.primary} />

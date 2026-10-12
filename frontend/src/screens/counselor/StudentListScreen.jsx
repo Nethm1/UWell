@@ -17,6 +17,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
+import CounselorBackButton from '../../components/navigation/CounselorBackButton';
 import { counselorService } from '../../services/counselorService';
 
 const FILTERS = ['All', 'New', 'Active', 'Archived'];
@@ -67,7 +68,10 @@ const StudentListScreen = ({ navigation }) => {
     const course = (student.yearCourse || '').toLowerCase();
     const email = (student.email || '').toLowerCase();
     const matchesQuery = !normalizedSearch || `${name} ${course} ${email}`.includes(normalizedSearch);
-    const matchesStatus = activeFilter === 'All' || (student.status || 'New') === activeFilter;
+    const status = student.status || 'New';
+    const matchesStatus = activeFilter === 'All'
+      ? status !== 'Archived'
+      : status === activeFilter;
     return matchesQuery && matchesStatus;
   });
 
@@ -76,6 +80,10 @@ const StudentListScreen = ({ navigation }) => {
       screen: 'StudentChat',
       params: { studentId: student.id, studentName: student.name },
     });
+  };
+
+  const openStudentProfile = (student) => {
+    navigation.navigate('StudentSession', { studentId: student.id });
   };
 
   const changeStatus = (student) => {
@@ -87,7 +95,9 @@ const StudentListScreen = ({ navigation }) => {
       setUpdatingId(student.id);
       try {
         await counselorService.updateStudentStatus(student.id, nextStatus);
-        await loadStudents();
+        setStudents((current) => current.map((item) => (
+          item.id === student.id ? { ...item, status: nextStatus } : item
+        )));
       } catch (error) {
         const details = error.response?.data?.message || 'Could not update student status. Please retry.';
         if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(details);
@@ -115,7 +125,13 @@ const StudentListScreen = ({ navigation }) => {
       <View style={styles.cardShell}>
         <View style={[styles.cardAccent, { backgroundColor: tone.accent }]} />
         <View style={styles.cardContent}>
-          <View style={styles.cardTopRow}>
+          <TouchableOpacity
+            style={styles.cardTopRow}
+            onPress={() => openStudentProfile(item)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${item.name || 'student'} profile`}
+          >
             <ImagePlaceholder initials={item.avatarInitials || item.name?.slice(0, 2) || 'ST'} size={48} />
             <View style={styles.studentMeta}>
               <Text style={styles.studentName} numberOfLines={1}>{item.name || 'Student'}</Text>
@@ -125,12 +141,12 @@ const StudentListScreen = ({ navigation }) => {
             <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
               <Text style={[styles.statusText, { color: tone.text }]}>{status}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
           <View style={styles.cardActions}>
             <TouchableOpacity
               style={styles.recordButton}
-              onPress={() => navigation.navigate('StudentSession', { studentId: item.id })}
+              onPress={() => openStudentProfile(item)}
               activeOpacity={0.78}
               accessibilityLabel={`Open ${item.name}'s student record`}
             >
@@ -183,6 +199,7 @@ const StudentListScreen = ({ navigation }) => {
           onRefresh={loadStudents}
           ListHeaderComponent={(
             <View>
+              <CounselorBackButton navigation={navigation} style={styles.backButton} />
               <View style={styles.headerRow}>
                 <View style={{ flex: 1 }}>
                   <View style={styles.eyebrow}><View style={styles.eyebrowDot} /><Text style={styles.eyebrowText}>YOUR COUNSELING PRACTICE</Text></View>
@@ -249,6 +266,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FB' },
   container: { flex: 1 },
   listContent: { paddingHorizontal: 18, paddingTop: 14, flexGrow: 1 },
+  backButton: { marginLeft: -6, marginBottom: 2 },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
   eyebrow: { flexDirection: 'row', alignItems: 'center', marginBottom: 7 },
   eyebrowDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#2BA77A', marginRight: 7 },

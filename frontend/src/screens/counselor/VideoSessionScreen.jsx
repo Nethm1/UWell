@@ -6,6 +6,7 @@ import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Animated, Alert } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
+import { navigateBackSafely } from '../../components/navigation/CounselorBackButton';
 import { connectSocket } from '../../services/socketService';
 import { useAuth } from '../../context/AuthContext';
 
@@ -143,7 +144,7 @@ const VideoSessionScreen = ({ route, navigation }) => {
     if (attemptActiveRef.current && callRef.current?.callId) socketRef.current?.emit('call-cancel', { callId: callRef.current.callId });
     attemptActiveRef.current = false;
     callRef.current = null;
-    navigation.goBack();
+    navigateBackSafely(navigation);
   };
   const initials = studentName.split(' ').map((p) => p[0]).filter(Boolean).slice(0,2).join('').toUpperCase() || 'ST';
   const statusLabel = callState === S.CALLING ? ('CALLING... ' + countdown + 's') :

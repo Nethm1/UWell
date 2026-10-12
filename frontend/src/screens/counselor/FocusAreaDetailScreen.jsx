@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import CounselorBackButton from '../../components/navigation/CounselorBackButton';
 
 const { width } = Dimensions.get('window');
 
@@ -130,14 +131,7 @@ const FocusAreaDetailScreen = ({ route, navigation }) => {
 
       {/* ── Nav bar ─────────────────────────────────────────────── */}
       <View style={styles.navBar}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-        >
-          <Feather name="chevron-left" size={22} color={colors.darkText} />
-        </TouchableOpacity>
+        <CounselorBackButton navigation={navigation} style={styles.backBtn} />
 
         <Text style={styles.navTitle} numberOfLines={1}>{area.key}</Text>
 

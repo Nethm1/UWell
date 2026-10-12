@@ -11,42 +11,26 @@ import {
   Animated,
   Dimensions,
   Platform,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing } from '../../theme';
-import { useAuth } from '../../context/AuthContext';
+import CounselorBackButton from '../../components/navigation/CounselorBackButton';
 import { counselorService } from '../../services/counselorService';
-import { initialClinicalFocusAreas } from '../../data/counselorMockData';
 
 const { width } = Dimensions.get('window');
 
 // ─── Focus area config ────────────────────────────────────────────────────
-const FOCUS_ICONS = {
-  'Academic Burnout':    { icon: 'school',          lib: 'Ionicons',   bg: '#FDF1EC', color: '#E8836B' },
-  'ADHD Management':    { icon: 'brain',            lib: 'Material',   bg: '#EAF3FF', color: '#4A90E2' },
-  'Anxiety Disorder':   { icon: 'heart',            lib: 'Feather',    bg: '#E8F8EF', color: '#397052' },
-  'Social Adjustment':  { icon: 'people',           lib: 'Ionicons',   bg: '#F3EEFF', color: '#7C5CBF' },
-};
-
-const FocusIcon = ({ name }) => {
-  const cfg = FOCUS_ICONS[name] || { icon: 'star', lib: 'Feather', bg: colors.softCoral, color: colors.primary };
-  const size = 26;
-  if (cfg.lib === 'Ionicons')  return <Ionicons name={cfg.icon} size={size} color={cfg.color} />;
-  if (cfg.lib === 'Material')  return <MaterialCommunityIcons name={cfg.icon} size={size} color={cfg.color} />;
-  return <Feather name={cfg.icon} size={size} color={cfg.color} />;
-};
-
-// ─── Days short names ────────────────────────────────────────────────────
-const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DAY_FULL  = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-// ─── Main Screen ─────────────────────────────────────────────────────────
 const ProfileScreen = ({ navigation }) => {
-  const { logout } = useAuth();
   const [profile, setProfile]       = useState(null);
-  const [stats, setStats]           = useState(null);
-  const [schedule, setSchedule]     = useState([]);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState('');
+  const [locationModal, setLocationModal] = useState(false);
+  const [locationDraft, setLocationDraft] = useState('');
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [locationError, setLocationError] = useState('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -57,70 +41,82 @@ const ProfileScreen = ({ navigation }) => {
   }, [navigation]);
 
   const loadAll = async () => {
-    const [p, s, av] = await Promise.all([
-      counselorService.getCounselorProfile(),
-      counselorService.getPerformanceStats(),
-      counselorService.getAvailability(),
-    ]);
-    setProfile(p);
-    setStats(s);
-    setSchedule(av);
+    setProfileLoading(true);
+    setProfileError('');
+    try {
+      const data = await counselorService.getCounselorProfile();
+      if (!data) throw new Error('Counselor profile is unavailable.');
+      setProfile(data);
+    } catch (error) {
+      setProfile(null);
+      setProfileError(error.response?.data?.message || 'Could not load your profile. Check your connection and try again.');
+    } finally { setProfileLoading(false); }
   };
 
-  const confirmSignOut = async () => {
-    await logout();
+  const openLocationEditor = () => {
+    setLocationDraft(profile?.officeLocation || '');
+    setLocationError('');
+    setLocationModal(true);
   };
 
-  const handleSignOut = () => {
-    const message = 'Are you sure you want to sign out?';
-
-    // Alert.alert is not supported on web, so use the browser confirmation there.
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.confirm(message)) {
-        void confirmSignOut();
-      }
+  const saveOfficeLocation = async () => {
+    const nextLocation = locationDraft.trim();
+    if (nextLocation.length > 250) {
+      setLocationError('Location must be 250 characters or fewer.');
       return;
     }
+    setLocationSaving(true);
+    setLocationError('');
+    try {
+      const updated = await counselorService.saveOfficeLocation(nextLocation);
+      setProfile((current) => ({ ...current, ...updated, officeLocation: updated?.officeLocation ?? nextLocation }));
+      setLocationModal(false);
+    } catch (error) {
+      setLocationError(error.response?.data?.message || 'Could not save the office location. Check your connection and try again.');
+    } finally {
+      setLocationSaving(false);
+    }
+  };
 
-    Alert.alert('Sign Out', message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => { void confirmSignOut(); } },
+  const deleteOfficeLocation = () => {
+    const remove = async () => {
+      setLocationSaving(true);
+      try {
+        const updated = await counselorService.saveOfficeLocation('');
+        setProfile((current) => ({ ...current, ...updated, officeLocation: '' }));
+      } catch (error) {
+        const message = error.response?.data?.message || 'Could not delete the office location. Check your connection and try again.';
+        if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(message);
+        else Alert.alert('Delete failed', message);
+      } finally {
+        setLocationSaving(false);
+      }
+    };
+    const message = 'Remove your saved office location?';
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(message)) void remove();
+      return;
+    }
+    Alert.alert('Delete office location', message, [
+      { text: 'Keep', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => void remove() },
     ]);
   };
 
-  // Map full day name → schedule entry
-  const dayMap = {};
-  schedule.forEach(s => { dayMap[s.day] = s; });
-
-  const focus = profile?.clinicalFocus || [
-    'Academic Burnout', 'ADHD Management', 'Anxiety Disorder', 'Social Adjustment',
-  ];
-
-  // Navigate to the full list screen or directly to a detail card
-  const handleSeeAll = () => navigation.navigate('ClinicalFocusAreas');
-  const handleFocusCard = (itemKey) => {
-    const area = initialClinicalFocusAreas.find(a => a.key === itemKey);
-    if (area) {
-      navigation.navigate('FocusAreaDetail', { area });
-    } else {
-      navigation.navigate('ClinicalFocusAreas');
-    }
-  };
+  const focus = profile?.clinicalFocus || [];
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.creamBackground} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* ── Top bar ───────────────────────────────────────────── */}
-      <View style={styles.topBar}>
-        <View>
-          <Text style={styles.pageTitle}>My Profile</Text>
-          <Text style={styles.pageSubtitle}>View and manage your professional details</Text>
-        </View>
+      <View style={styles.referenceTopBar}>
+        <CounselorBackButton navigation={navigation} />
+        <Text style={styles.referenceTopTitle}>My Profile</Text>
         <TouchableOpacity
-          style={styles.gearBtn}
-          onPress={handleSignOut}
-          accessibilityLabel="Settings / Sign Out"
+          style={styles.referenceGear}
+          onPress={() => navigation.navigate('CounselorSettings')}
+          accessibilityLabel="Open settings"
         >
           <Feather name="settings" size={20} color={colors.textSecondary} />
         </TouchableOpacity>
@@ -131,292 +127,61 @@ const ProfileScreen = ({ navigation }) => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Hero Card ────────────────────────────────────────── */}
-        <View style={styles.heroCard}>
-          {/* Decorative blobs */}
-          <View style={styles.blobTopRight} />
-          <View style={styles.blobBottomLeft} />
+        {profileLoading && <View style={styles.profileFeedback}><Text style={styles.profileFeedbackText}>Loading your profile...</Text></View>}
+        {!!profileError && <View style={styles.profileErrorCard}><Text style={styles.profileErrorText}>{profileError}</Text><TouchableOpacity onPress={loadAll}><Text style={styles.profileRetry}>Try again</Text></TouchableOpacity></View>}
 
-          {/* Left col */}
-          <View style={styles.heroLeft}>
-            {/* Avatar */}
-            <View style={styles.avatarWrap}>
-              {profile?.profileImage ? (
-                <Image
-                  source={{ uri: profile.profileImage }}
-                  style={styles.avatarImage}
-                  accessibilityLabel="Counselor profile photo"
-                />
-              ) : (
-                <View style={styles.avatarCircle}>
-                  <Text style={styles.avatarText}>
-                    {(profile?.avatarInitials || 'EM').toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.editAvatarBtn}
-                onPress={() => navigation.navigate('EditProfile')}
-                accessibilityLabel="Edit avatar"
-              >
-                <Feather name="edit-2" size={11} color={colors.white} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Name & title */}
-            <Text style={styles.heroName}>
-              {profile?.name || 'Dr. Evelyn Martinez, PhD'}
-            </Text>
-            <Text style={styles.heroTitle}>
-              {profile?.title || 'Senior Student Cognitive Psychologist'}
-            </Text>
-
-            {/* Rating */}
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color="#F5A623" />
-              <Text style={styles.ratingNum}> {profile?.rating || '4.9'}</Text>
-              <Text style={styles.ratingMeta}>
-                {'  '}({profile?.sessionsReviewed || 148} sessions reviewed)
-              </Text>
-            </View>
-
-            {/* Mini stats */}
-            <View style={styles.miniStatsRow}>
-              <View style={styles.miniStat}>
-                <Ionicons name="people-outline" size={16} color={colors.primary} />
-                <Text style={styles.miniStatNum}>{stats?.activeCases ?? 42}</Text>
-                <Text style={styles.miniStatLabel}>Active Cases</Text>
-              </View>
-              <View style={styles.miniStatDivider} />
-              <View style={styles.miniStat}>
-                <Ionicons name="bar-chart-outline" size={16} color={colors.primary} />
-                <Text style={styles.miniStatNum}>{stats?.thisWeekSessions ?? 18}</Text>
-                <Text style={styles.miniStatLabel}>This Week</Text>
-              </View>
-              <View style={styles.miniStatDivider} />
-              <View style={styles.miniStat}>
-                <Feather name="file-text" size={15} color={colors.primary} />
-                <Text style={styles.miniStatNum}>{stats?.pendingRequests ?? 5}</Text>
-                <Text style={styles.miniStatLabel}>Requests</Text>
-              </View>
-            </View>
+        <View style={styles.referenceProfileCard}>
+          <View style={styles.referenceCover}>
+            <Ionicons name="leaf" size={88} color="rgba(255,255,255,0.4)" style={styles.coverLeafLeft} />
+            <Ionicons name="leaf" size={112} color="rgba(255,255,255,0.42)" style={styles.coverLeafRight} />
           </View>
-
-          {/* Right decorative image placeholder */}
-          <View style={styles.heroImageBox}>
-            <View style={styles.heroImageInner}>
-              <Ionicons name="business-outline" size={38} color={colors.primary} style={{ opacity: 0.35 }} />
-            </View>
-            <View style={styles.heroQuoteBox}>
-              <Text style={styles.heroQuoteText}>
-                "Supporting{'\n'}students today{'\n'}for a{' '}
-                <Text style={{ textDecorationLine: 'underline', color: colors.primary }}>brighter{'\n'}tomorrow.</Text>"
-              </Text>
-            </View>
+          <View style={styles.referenceAvatarWrap}>
+            {profile?.profileImage ? <Image source={{ uri: profile.profileImage }} style={styles.referenceAvatar} accessibilityLabel="Counselor profile photo" /> : <View style={[styles.referenceAvatar, styles.referenceAvatarFallback]}><Text style={styles.referenceAvatarText}>{profile?.avatarInitials || '?'}</Text></View>}
+            <TouchableOpacity style={styles.referenceCamera} onPress={() => navigation.navigate('EditProfile')} accessibilityLabel="Change profile photo"><Feather name="camera" size={15} color="#fff" /></TouchableOpacity>
           </View>
+          <Text style={styles.referenceName}>{profile?.name || (profileLoading ? 'Loading profile...' : 'Profile unavailable')}</Text>
+          <Text style={styles.referenceRole}>{profile?.title || profile?.specialization || 'Counselor'}</Text>
+          {!!profile?.status && <View style={styles.referenceStatus}><View style={styles.referenceStatusDot} /><Text style={styles.referenceStatusText}>{profile.status}</Text></View>}
 
-          {/* Manage Availability */}
-          <TouchableOpacity
-            style={styles.availBtn}
-            onPress={() => navigation.navigate('Availability')}
-            accessibilityLabel="Manage Availability"
-          >
-            <Feather name="calendar" size={16} color={colors.white} style={{ marginRight: 8 }} />
-            <Text style={styles.availBtnText}>Manage Availability</Text>
-            <Feather name="chevron-right" size={16} color={colors.white} style={{ marginLeft: 'auto' }} />
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Clinical Focus Areas ─────────────────────────────── */}
-        <View style={styles.sectionRow}>
-          <View style={styles.sectionLeft}>
-            <View style={[styles.sectionIconCircle, { backgroundColor: '#FDF1EC' }]}>
-              <MaterialCommunityIcons name="brain" size={18} color={colors.primary} />
-            </View>
-            <View>
-              <Text style={styles.sectionTitle}>CLINICAL FOCUS AREAS</Text>
-              <Text style={styles.sectionSub}>Key areas you support students with</Text>
-            </View>
-          </View>
-          {/* ── WIRED: See All navigates to full list screen ── */}
-          <TouchableOpacity
-            onPress={handleSeeAll}
-            accessibilityLabel="See all clinical focus areas"
-            accessibilityRole="button"
-          >
-            <Text style={styles.seeAll}>See All ›</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.focusGrid}>
-          {focus.map((item, i) => {
-            const cfg = FOCUS_ICONS[item] || { bg: colors.softCoral, color: colors.primary };
-            return (
-              // ── WIRED: each card navigates to its detail screen ──
-              <TouchableOpacity
-                key={i}
-                style={styles.focusCard}
-                activeOpacity={0.8}
-                accessibilityLabel={`${item}. Tap to view details.`}
-                accessibilityRole="button"
-                onPress={() => handleFocusCard(item)}
-              >
-                <View style={[styles.focusIconCircle, { backgroundColor: cfg.bg }]}>
-                  <FocusIcon name={item} />
-                </View>
-                <Text style={styles.focusLabel}>{item}</Text>
-                <Feather name="chevron-right" size={14} color={colors.textSecondary} style={styles.focusChevron} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* ── Office & Contact ─────────────────────────────────── */}
-        <View style={[styles.sectionRow, { marginTop: 4 }]}>
-          <View style={styles.sectionLeft}>
-            <View style={[styles.sectionIconCircle, { backgroundColor: '#FDF1EC' }]}>
-              <Ionicons name="business-outline" size={18} color={colors.primary} />
-            </View>
-            <View>
-              <Text style={styles.sectionTitle}>OFFICE & CONTACT</Text>
-              <Text style={styles.sectionSub}>Your office location and professional contact details</Text>
-            </View>
+          <View style={styles.referenceContactRow}>
+            <View style={styles.referenceContactItem}><Feather name="mail" size={20} color="#71829D" /><Text style={styles.referenceContactValue} numberOfLines={2}>{profile?.email || 'Email not set'}</Text></View>
+            <View style={styles.referenceContactItem}><Feather name="phone" size={20} color="#71829D" /><Text style={styles.referenceContactValue} numberOfLines={2}>{profile?.phone || 'Phone not set'}</Text></View>
+            <View style={styles.referenceContactItem}><Feather name="map-pin" size={20} color="#71829D" /><Text style={styles.referenceContactValue} numberOfLines={2}>{profile?.officeLocation || 'Location not set'}</Text><View style={styles.referenceLocationActions}><TouchableOpacity onPress={openLocationEditor} accessibilityLabel={profile?.officeLocation ? 'Edit office location' : 'Add office location'}><Feather name={profile?.officeLocation ? 'edit-2' : 'plus'} size={13} color="#0865D9" /></TouchableOpacity>{!!profile?.officeLocation && <TouchableOpacity onPress={deleteOfficeLocation} disabled={locationSaving} accessibilityLabel="Delete office location"><Feather name="trash-2" size={13} color="#B42318" /></TouchableOpacity>}</View></View>
           </View>
         </View>
 
-        <View style={styles.officeCard}>
-          {/* Building image placeholder */}
-          <View style={styles.buildingImgBox}>
-            <View style={styles.buildingImgInner}>
-              <Ionicons name="business" size={44} color={colors.primary} style={{ opacity: 0.25 }} />
-            </View>
-            <View style={styles.buildingLabel}>
-              <Ionicons name="location" size={12} color={colors.white} />
-              <Text style={styles.buildingLabelText}>
-                {profile?.officeLocation || 'Clinic Hall B, Room 302'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Contact details */}
-          <View style={styles.contactDetails}>
-            <View style={styles.contactRow}>
-              <View style={[styles.contactIconCircle, { backgroundColor: '#FDF1EC' }]}>
-                <Ionicons name="location-outline" size={14} color={colors.primary} />
-              </View>
-              <View style={styles.contactText}>
-                <Text style={styles.contactLabel}>Office Location</Text>
-                <Text style={styles.contactVal}>
-                  {profile?.officeLocation || 'Clinic Hall B, Room 302'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.contactDivider} />
-
-            <View style={styles.contactRow}>
-              <View style={[styles.contactIconCircle, { backgroundColor: '#EAF3FF' }]}>
-                <Feather name="mail" size={14} color="#4A90E2" />
-              </View>
-              <View style={styles.contactText}>
-                <Text style={styles.contactLabel}>Contact Email</Text>
-                <Text style={styles.contactVal}>
-                  {profile?.email || 'e.martinez@university.edu'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.contactDivider} />
-
-            <View style={styles.contactRow}>
-              <View style={[styles.contactIconCircle, { backgroundColor: '#E8F8EF' }]}>
-                <Feather name="award" size={14} color="#397052" />
-              </View>
-              <View style={styles.contactText}>
-                <Text style={styles.contactLabel}>Qualification</Text>
-                <Text style={styles.contactVal}>
-                  {profile?.qualification || 'PhD in Clinical Psychology, Stanford'}
-                </Text>
-              </View>
-            </View>
-          </View>
+        <View style={styles.referenceInfoCard}>
+          <View style={styles.referenceInfoIcon}><Feather name="award" size={22} color="#0875DA" /></View>
+          <View style={styles.referenceInfoCopy}><Text style={styles.referenceInfoTitle}>Qualifications</Text><Text style={styles.referenceInfoText}>{profile?.qualification || 'Add your qualifications in Edit Profile'}</Text></View>
+        </View>
+        <View style={styles.referenceInfoCard}>
+          <View style={[styles.referenceInfoIcon, { backgroundColor: '#FFF2E5' }]}><Feather name="book-open" size={22} color="#D78322" /></View>
+          <View style={styles.referenceInfoCopy}><Text style={styles.referenceInfoTitle}>Specialization</Text><Text style={styles.referenceInfoText}>{profile?.specialization || 'Add your specialization in Edit Profile'}</Text>{!!focus.length && <Text style={styles.referenceInfoText}>{focus.join(', ')}</Text>}</View>
+        </View>
+        <View style={styles.referenceInfoCard}>
+          <View style={[styles.referenceInfoIcon, { backgroundColor: '#F2ECFF' }]}><Feather name="file-text" size={22} color="#7952C5" /></View>
+          <View style={styles.referenceInfoCopy}><Text style={styles.referenceInfoTitle}>Bio</Text><Text style={styles.referenceInfoText}>{profile?.bio || 'Add a short professional bio in Edit Profile'}</Text></View>
         </View>
 
-        {/* ── Office Hours ─────────────────────────────────────── */}
-        <View style={[styles.sectionRow, { marginTop: 4 }]}>
-          <View style={styles.sectionLeft}>
-            <View style={[styles.sectionIconCircle, { backgroundColor: '#FDF1EC' }]}>
-              <Feather name="clock" size={17} color={colors.primary} />
-            </View>
-            <View>
-              <Text style={styles.sectionTitle}>OFFICE HOURS</Text>
-              <Text style={styles.sectionSub}>Your regular availability at the clinic</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.manageHoursBtn}
-            onPress={() => navigation.navigate('Availability')}
-          >
-            <Text style={styles.manageHoursText}>Manage Hours</Text>
-            <Feather name="chevron-right" size={12} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.hoursCard}>
-          <View style={styles.hoursGrid}>
-            {DAY_SHORT.map((short, i) => {
-              const full  = DAY_FULL[i];
-              const entry = dayMap[full];
-              const isOpen   = entry?.active;
-              const isWeekend = i >= 5;
-              return (
-                <View key={short} style={styles.hoursDayCol}>
-                  <Text style={[styles.hoursDayName, isWeekend && { color: colors.primary }]}>
-                    {short}
-                  </Text>
-                  {isOpen ? (
-                    <>
-                      <Text style={styles.hoursTime}>
-                        {(entry.startTime || '9:00').replace(' AM', '').replace(' PM', '')}
-                      </Text>
-                      <Text style={styles.hoursDivText}>–</Text>
-                      <Text style={styles.hoursTime}>
-                        {(entry.endTime || '17:00').replace(' AM', '').replace(' PM', '')}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={styles.hoursClosed}>Closed</Text>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* ── Edit Profile Button ───────────────────────────────── */}
-        <TouchableOpacity
-          style={styles.editProfileBtn}
-          onPress={() => navigation.navigate('EditProfile')}
-          accessibilityLabel="Edit Profile"
-        >
-          <Feather name="edit-2" size={16} color={colors.white} style={{ marginRight: 8 }} />
-          <Text style={styles.editProfileBtnText}>Edit Profile</Text>
-          <Feather name="chevron-right" size={16} color={colors.white} style={{ marginLeft: 'auto' }} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={handleSignOut}
-          accessibilityRole="button"
-          accessibilityLabel="Log out"
-          activeOpacity={0.8}
-        >
-          <Feather name="log-out" size={17} color="#B42318" style={{ marginRight: 9 }} />
-          <Text style={styles.logoutBtnText}>Log Out</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: 32 }} />
+        <TouchableOpacity style={styles.referenceEditButton} onPress={() => navigation.navigate('EditProfile')} accessibilityRole="button"><Feather name="edit-2" size={17} color="#fff" /><Text style={styles.referenceEditText}>Edit Profile</Text></TouchableOpacity>
+        <View style={{ height: 20 }} />
       </Animated.ScrollView>
+      <Modal visible={locationModal} transparent animationType="fade" onRequestClose={() => !locationSaving && setLocationModal(false)}>
+        <View style={styles.locationModalBackdrop}>
+          <View style={styles.locationModalCard}>
+            <Text style={styles.locationModalTitle}>{profile?.officeLocation ? 'Edit office location' : 'Add office location'}</Text>
+            <Text style={styles.locationModalHint}>Students will see this address for in-person appointments.</Text>
+            <TextInput value={locationDraft} onChangeText={setLocationDraft} placeholder="Building, room, or campus address" placeholderTextColor="#98A1AC" style={styles.locationInput} maxLength={250} multiline accessibilityLabel="Office location" />
+            {!!locationError && <Text style={styles.locationError}>{locationError}</Text>}
+            <View style={styles.locationModalActions}>
+              <TouchableOpacity onPress={() => setLocationModal(false)} disabled={locationSaving} style={styles.locationCancel}><Text style={styles.locationCancelText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity onPress={saveOfficeLocation} disabled={locationSaving} style={styles.locationSave}>
+                <Text style={styles.locationSaveText}>{locationSaving ? 'Saving…' : 'Save location'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -427,16 +192,44 @@ const FOCUS_CARD_W = (width - spacing.md * 2 - spacing.sm) / 2;
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.creamBackground,
+    backgroundColor: '#F8FAFD',
   },
   scroll: {
     flex: 1,
-    backgroundColor: colors.creamBackground,
+    backgroundColor: '#F8FAFD',
   },
   content: {
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
   },
+  referenceTopBar: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, backgroundColor: '#fff' },
+  referenceTopTitle: { color: '#101B37', fontSize: 18, fontWeight: '800' },
+  referenceGear: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19 },
+  referenceProfileCard: { backgroundColor: '#fff', borderRadius: 18, marginBottom: 12, borderWidth: 1, borderColor: '#EDF1F6', overflow: 'visible', alignItems: 'center', paddingBottom: 16, shadowColor: '#233B5C', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  referenceCover: { height: 142, alignSelf: 'stretch', borderTopLeftRadius: 18, borderTopRightRadius: 18, backgroundColor: '#CDEBFF', overflow: 'hidden', position: 'relative' },
+  coverLeafLeft: { position: 'absolute', left: -8, bottom: -24, transform: [{ rotate: '-28deg' }] },
+  coverLeafRight: { position: 'absolute', right: -8, top: 10, transform: [{ rotate: '35deg' }] },
+  referenceAvatarWrap: { width: 108, height: 108, marginTop: -54, borderRadius: 54, borderWidth: 4, borderColor: '#fff', position: 'relative', backgroundColor: '#fff' },
+  referenceAvatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#EAF3FB' },
+  referenceAvatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  referenceAvatarText: { color: '#1767C4', fontWeight: '800', fontSize: 28 },
+  referenceCamera: { position: 'absolute', right: -3, bottom: 3, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0865D9', borderWidth: 2, borderColor: '#fff' },
+  referenceName: { marginTop: 8, color: '#101B37', fontSize: 20, fontWeight: '800', textAlign: 'center', paddingHorizontal: 12 },
+  referenceRole: { color: '#61728F', fontSize: 13, marginTop: 3 },
+  referenceStatus: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 16, backgroundColor: '#E4F8F1', paddingHorizontal: 11, paddingVertical: 5, marginTop: 9 },
+  referenceStatusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#18B782' },
+  referenceStatusText: { color: '#187A5A', fontSize: 11, fontWeight: '700' },
+  referenceContactRow: { flexDirection: 'row', alignItems: 'flex-start', width: '100%', marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderTopColor: '#EFF2F6' },
+  referenceContactItem: { width: '33.333%', minHeight: 62, alignItems: 'center', paddingHorizontal: 5, gap: 6 },
+  referenceContactValue: { color: '#293B5A', fontSize: 10, lineHeight: 14, textAlign: 'center' },
+  referenceLocationActions: { flexDirection: 'row', gap: 12, marginTop: -2 },
+  referenceInfoCard: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 13, padding: 14, marginBottom: 9, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#EDF1F6', shadowColor: '#233B5C', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
+  referenceInfoIcon: { width: 48, height: 48, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6F3FF' },
+  referenceInfoCopy: { flex: 1 },
+  referenceInfoTitle: { color: '#111C37', fontSize: 14, fontWeight: '800', marginBottom: 3 },
+  referenceInfoText: { color: '#526483', fontSize: 12, lineHeight: 17 },
+  referenceEditButton: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 12, backgroundColor: '#0865D9', marginTop: 4, shadowColor: '#0865D9', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 6, elevation: 2 },
+  referenceEditText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 
   // ── Top bar ──────────────────────────────────────────────────
   topBar: {
@@ -705,6 +498,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
+  emptyFocus: { width: '100%', color: colors.textSecondary, fontSize: 12, lineHeight: 18, paddingVertical: 10 },
+  profileFeedback: { backgroundColor: colors.white, borderRadius: 12, padding: 12, marginBottom: spacing.sm },
+  profileFeedbackText: { color: colors.textSecondary, fontSize: 12 },
+  profileErrorCard: { backgroundColor: '#FFF1EF', borderRadius: 12, padding: 13, marginBottom: spacing.sm, borderWidth: 1, borderColor: '#F4D0C9' },
+  profileErrorText: { color: '#9B3125', fontSize: 12, lineHeight: 18 },
+  profileRetry: { color: colors.primary, fontSize: 12, fontWeight: '800', marginTop: 8 },
   focusCard: {
     width: FOCUS_CARD_W,
     backgroundColor: colors.white,
@@ -817,12 +616,27 @@ const styles = StyleSheet.create({
     color: colors.darkText,
     lineHeight: 16,
   },
+  locationActions: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 7 },
+  locationAction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 3 },
+  locationActionText: { color: colors.primary, fontSize: 11, fontWeight: '700' },
+  locationModalBackdrop: { flex: 1, backgroundColor: 'rgba(24,32,44,0.48)', justifyContent: 'center', padding: 22 },
+  locationModalCard: { backgroundColor: colors.white, borderRadius: 18, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 8 },
+  locationModalTitle: { color: colors.darkText, fontSize: 18, fontWeight: '800' },
+  locationModalHint: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 6, marginBottom: 14 },
+  locationInput: { minHeight: 76, borderColor: colors.border, borderWidth: 1, borderRadius: 11, padding: 12, color: colors.darkText, textAlignVertical: 'top', fontSize: 14 },
+  locationError: { color: '#B42318', fontSize: 12, marginTop: 8 },
+  locationModalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 18 },
+  locationCancel: { paddingHorizontal: 15, paddingVertical: 11, borderRadius: 10, backgroundColor: '#F3F5F7' },
+  locationCancelText: { color: colors.textSecondary, fontWeight: '700', fontSize: 13 },
+  locationSave: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, backgroundColor: colors.primary },
+  locationSaveText: { color: colors.white, fontWeight: '700', fontSize: 13 },
   contactDivider: {
     height: 1,
     backgroundColor: colors.border,
     marginVertical: 2,
     marginLeft: 38,
   },
+  bioSummary: { paddingVertical: 6, paddingLeft: 38 },
 
   // ── Office Hours ─────────────────────────────────────────────
   manageHoursBtn: {

@@ -38,6 +38,28 @@ exports.getStudentById = async (req, res) => {
     });
     if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
     const [payload] = await withPhoneNumber([student]);
+    // Only expose an allow-listed student profile when this counselor owns the
+    // linked client record. Never return credentials or account security data.
+    const profileFields = 'studentId firstName lastName faculty degreeProgram yearOfStudy email phone profilePicture bio';
+    let sourceProfile = student.sourceStudentId
+      ? await Student.findById(student.sourceStudentId).select(profileFields)
+      : null;
+    // Older counselor records may have been linked by email before sourceStudentId
+    // was stored. The email lookup is still scoped by the counselor-owned record.
+    if (!sourceProfile && student.email) {
+      sourceProfile = await Student.findOne({ email: student.email.trim().toLowerCase() }).select(profileFields);
+    }
+    if (sourceProfile) {
+      payload.name = [sourceProfile.firstName, sourceProfile.lastName].filter(Boolean).join(' ') || payload.name;
+      payload.studentNumber = sourceProfile.studentId || '';
+      payload.faculty = sourceProfile.faculty || '';
+      payload.degreeProgram = sourceProfile.degreeProgram || '';
+      payload.yearOfStudy = sourceProfile.yearOfStudy || '';
+      payload.profilePicture = sourceProfile.profilePicture || '';
+      payload.bio = sourceProfile.bio || '';
+      payload.email = sourceProfile.email || payload.email || '';
+      payload.phone = sourceProfile.phone || payload.phone || '';
+    }
     return res.status(200).json(payload);
   } catch (error) {
     console.error('counselor getStudentById error:', error);

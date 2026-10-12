@@ -16,6 +16,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { counselorService } from '../../services/counselorService';
 import { useAuth } from '../../context/AuthContext';
 import { connectSocket } from '../../services/socketService';
+import { appointmentDateTime, formatCountdown } from '../../utils/counselorAppointments';
 
 const C = {
   page: '#FFF8F2',
@@ -167,7 +168,7 @@ const StatCard = ({ icon, value, label, tone = 'coral', compact }) => (
   </View>
 );
 
-const SessionCard = ({ item, student, onPress, compact }) => {
+const SessionCard = ({ item, student, onPress, compact, countdown }) => {
   const confirmed = String(item.status || '').toLowerCase() === 'confirmed';
   const name = item.studentName || student?.name || 'Student';
   const course = item.studentCourse || student?.yearCourse || 'Student support session';
@@ -187,6 +188,7 @@ const SessionCard = ({ item, student, onPress, compact }) => {
           <Feather name={/video|online/i.test(location) ? 'video' : 'map-pin'} size={14} color={C.coral} />
           <Text style={styles.metaText} numberOfLines={1}>{location}</Text>
         </View>
+        {countdown ? <Text style={styles.countdownText}>{countdown}</Text> : null}
       </View>
         <View style={styles.sessionRight}>
           <View style={[styles.statusPill, compact && styles.statusPillCompact, confirmed ? styles.confirmedPill : styles.pendingPill]}>
@@ -219,6 +221,12 @@ const DashboardScreen = ({ navigation }) => {
   const [students, setStudents] = useState([]);
   const [callAvailable, setCallAvailable] = useState(true);
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const socket = connectSocket();
@@ -298,8 +306,17 @@ const DashboardScreen = ({ navigation }) => {
   const firstName = getFirstName(fullName);
   const initials = profile?.avatarInitials || initialsFor(fullName);
   const sortedAppointments = useMemo(() => appointments
-    .filter((item) => !['cancelled', 'completed'].includes(String(item.status || '').toLowerCase()))
-    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))), [appointments]);
+    .filter((item) => {
+      if (['cancelled', 'completed'].includes(String(item.status || '').toLowerCase())) return false;
+      const dateTime = appointmentDateTime(item, now);
+      return !dateTime || dateTime >= now;
+    })
+    .sort((a, b) => (appointmentDateTime(a, now)?.getTime() ?? Infinity) - (appointmentDateTime(b, now)?.getTime() ?? Infinity)), [appointments, now]);
+  const nextAppointment = useMemo(() => sortedAppointments
+    .map((item) => ({ item, dateTime: appointmentDateTime(item, now) }))
+    .filter(({ dateTime }) => dateTime && dateTime >= now)
+    .sort((a, b) => a.dateTime - b.dateTime)[0], [sortedAppointments, now]);
+  const notificationCount = appointments.filter((item) => String(item.status || '').toLowerCase() === 'pending').length;
   const todayCount = appointments.filter((item) => String(item.date || '').toLowerCase() === 'today').length;
   const recentNotes = students
     .filter((student) => typeof student.sessionNotesHistory === 'string' && student.sessionNotesHistory.trim())
@@ -331,13 +348,13 @@ const DashboardScreen = ({ navigation }) => {
           <View style={[styles.topActions, compact && styles.topActionsCompact]}>
             <TouchableOpacity
               style={[styles.bellButton, compact && styles.bellButtonCompact]}
-              onPress={() => navigation.navigate('Messages')}
+              onPress={() => navigation.navigate('Profile', { screen: 'CounselorNotifications' })}
               accessibilityRole="button"
               accessibilityLabel="Open messages"
               activeOpacity={0.72}
             >
               <Feather name="bell" size={22} color={C.coral} />
-              <View style={styles.notificationCount}><Text style={styles.notificationCountText}>3</Text></View>
+              {notificationCount > 0 ? <View style={styles.notificationCount}><Text style={styles.notificationCountText}>{notificationCount > 9 ? '9+' : notificationCount}</Text></View> : null}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')} accessibilityRole="button" accessibilityLabel="Open profile" activeOpacity={0.72}>
               <Avatar initials={initials} size={compact ? 50 : 58} imageUri={profile?.profileImage} />
@@ -436,6 +453,7 @@ const DashboardScreen = ({ navigation }) => {
               item={item}
               student={student}
               compact={compact}
+              countdown={nextAppointment?.item.id === item.id ? `Starts in ${formatCountdown(nextAppointment.dateTime - now)}` : null}
               onPress={() => openStudentSession(item)}
             />
           );
@@ -576,6 +594,7 @@ const styles = StyleSheet.create({
   noteDate: { color: C.muted, fontSize: 10 },
   sessionMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
   metaText: { color: C.muted, fontSize: 11, flexShrink: 1 },
+  countdownText: { color: C.coralDark, fontSize: 10, fontWeight: '800', marginTop: 7 },
   sessionRight: { alignItems: 'flex-end', justifyContent: 'space-between', alignSelf: 'stretch' },
   statusPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 16 },
   confirmedPill: { backgroundColor: C.greenBg },
