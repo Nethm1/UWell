@@ -1,0 +1,7 @@
+{
+  "task_id": "booking-flow-fix",
+  "task_description": "Fix backend startup crash and implement real-time booking approval notifications + video call invite flow between student and counselor",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

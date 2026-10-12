@@ -1,6 +1,6 @@
 /**
  * Student Video Session Screen
- * Shows session info (counselor name, date, time) and a Join Session button.
+ * Shows session info (counselor name, date, time) and handles waiting for counselor to join.
  * Uses tel: link for the actual call while showing a live session timer.
  */
 import React, { useState, useEffect, useRef } from 'react';
@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { connectSocket } from '../../services/socketService';
 
 export default function StudentVideoSessionScreen() {
   const navigation = useNavigation<any>();
@@ -41,9 +42,13 @@ export default function StudentVideoSessionScreen() {
   const [isVideoOff,  setIsVideoOff]  = useState(false);
   const [callStarted, setCallStarted] = useState(false);
   const [elapsed,     setElapsed]     = useState(0);
-
-  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [incomingCall, setIncomingCall] = useState(false);
+  const [callCountdown, setCallCountdown] = useState(30);
+  
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const socketRef = useRef(null);
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const callRef   = useRef<any>(null);
 
   // Initials from counselor name
   const initials = counselorName
@@ -62,9 +67,70 @@ export default function StudentVideoSessionScreen() {
       ]),
     );
     pulse.start();
+    
+    // Set up socket for incoming call invites
+    const socket = connectSocket();
+    socketRef.current = socket;
+    
+    const handleCallInvite = (data) => {
+      if (!data.counselorId || data.counselorId !== counselorPhone) return;
+      setIncomingCall(true);
+      setCallCountdown(30);
+      
+      // Start countdown
+      timerRef.current = setInterval(() => {
+        setCallCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      // Set timeout
+      const timeoutId = setTimeout(() => {
+        socket.emit('call-cancel', { callId: data.callId });
+        setIncomingCall(false);
+        setCallCountdown(30);
+      }, 30000);
+      
+      callRef.current = { callId: data.callId, timeoutId };
+    };
+    
+    const handleCallAccepted = (data) => {
+      if (callRef.current?.callId && data?.callId === callRef.current.callId) {
+        setIncomingCall(false);
+        setCallStarted(true);
+        setElapsed(0);
+        timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+        socket.off('call-invite', handleCallInvite);
+        socket.off('call-accepted', handleCallAccepted);
+        socket.off('call-declined', handleCallDeclined);
+      }
+    };
+    
+    const handleCallDeclined = (data) => {
+      if (callRef.current?.callId && data?.callId === callRef.current.callId) {
+        setIncomingCall(false);
+        setCallCountdown(30);
+        socket.off('call-invite', handleCallInvite);
+        socket.off('call-accepted', handleCallAccepted);
+        socket.off('call-declined', handleCallDeclined);
+      }
+    };
+    
+    socket.on('call-invite', handleCallInvite);
+    socket.on('call-accepted', handleCallAccepted);
+    socket.on('call-declined', handleCallDeclined);
+    
     return () => {
       pulse.stop();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (callRef.current?.timeoutId) clearTimeout(callRef.current.timeoutId);
+      socket.off('call-invite', handleCallInvite);
+      socket.off('call-accepted', handleCallAccepted);
+      socket.off('call-declined', handleCallDeclined);
     };
   }, []);
 
@@ -96,6 +162,17 @@ export default function StudentVideoSessionScreen() {
     timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
   };
 
+  const handleDeclineCall = () => {
+    if (callRef.current?.callId) {
+      socketRef.current?.emit('call-decline', {
+        callId: callRef.current.callId,
+        reason: 'declined',
+      });
+    }
+    setIncomingCall(false);
+    setCallCountdown(30);
+  };
+
   const handleEndCall = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     navigation.goBack();
@@ -115,7 +192,7 @@ export default function StudentVideoSessionScreen() {
             ]}
           />
           <Text style={styles.liveText}>
-            {callStarted ? `SESSION · ${formatElapsed(elapsed)}` : 'READY TO JOIN'}
+            {callStarted ? `SESSION · ${formatElapsed(elapsed)}` : incomingCall ? 'WAITING' : 'READY TO JOIN'}
           </Text>
         </View>
         <Text style={styles.encryptedTag}>🔒 Confidential</Text>
@@ -155,24 +232,32 @@ export default function StudentVideoSessionScreen() {
         <Text style={styles.counselorNameText}>{counselorName}</Text>
         <Text style={styles.sessionSubText}>UWell Counseling Session</Text>
 
-        {/* Status / Join button */}
-        {!callStarted ? (
-          <>
+        {/* Status / Waiting / Join button */}
+        {incomingCall ? (
+          <View style={styles.waitingBox}>
+            <Animated.View style={[styles.waitingDot, { opacity: pulseAnim }]} />
+            <Text style={styles.waitingText}>
+              Waiting for {counselorName} to join...
+            </Text>
+            <Text style={styles.waitingCountdown}>
+              Cancel in {callCountdown}s
+            </Text>
             <TouchableOpacity
-              style={styles.joinBtn}
-              onPress={handleJoin}
-              accessibilityLabel="Join session"
+              style={styles.declineButton}
+              onPress={handleDeclineCall}
             >
-              <Text style={styles.joinBtnIcon}>📞</Text>
-              <Text style={styles.joinBtnText}>Join Session</Text>
+              <Text style={styles.declineButtonText}>Decline</Text>
             </TouchableOpacity>
-
-            {!counselorPhone && (
-              <Text style={styles.noPhoneHint}>
-                No phone number on file — contact via chat
-              </Text>
-            )}
-          </>
+          </View>
+        ) : !callStarted ? (
+          <TouchableOpacity
+            style={styles.joinBtn}
+            onPress={handleJoin}
+            accessibilityLabel="Join session"
+          >
+            <Text style={styles.joinBtnIcon}>📞</Text>
+            <Text style={styles.joinBtnText}>Join Session</Text>
+          </TouchableOpacity>
         ) : (
           <View style={styles.callActiveBox}>
             <Animated.View style={[styles.callPulseDot, { opacity: pulseAnim }]} />
@@ -288,6 +373,22 @@ const styles = StyleSheet.create({
   counselorInitials:  { fontSize: 36, fontWeight: '700', color: '#EF806B' },
   counselorNameText:  { color: '#FFFFFF', fontSize: 22, fontWeight: '700', marginBottom: 5 },
   sessionSubText:     { color: '#8AAACC', fontSize: 13, marginBottom: 28 },
+
+  /* Waiting box */
+  waitingBox: {
+    backgroundColor: '#1A3A28',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    marginBottom: 12,
+    alignItems: 'center',
+    gap: 10,
+  },
+  waitingDot:       { width: 9, height: 9, borderRadius: 5, backgroundColor: '#65B87A' },
+  waitingText:      { color: '#65B87A', fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  waitingCountdown: { color: '#8AAACC', fontSize: 11 },
+  declineButton:    { backgroundColor: '#C0392B', paddingHorizontal: 30, paddingVertical: 10, borderRadius: 20 },
+  declineButtonText:{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 
   /* Join button */
   joinBtn: {

@@ -22,6 +22,7 @@ import { colors, spacing, typography } from '../../theme';
 import { useWelfare } from '../../context/WelfareContext';
 import { useAuth } from '../../context/AuthContext';
 import { welfareService, resolveProfileImageUrl } from '../../services/welfareService';
+import { authService } from '../../services/authService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
@@ -173,6 +174,32 @@ const cardStyles = StyleSheet.create({
 const ProfileScreen = ({ navigation }) => {
   const { profile, updateProfile, uploadProfilePhoto, removeProfilePhoto } = useWelfare();
   const { logout, user, updateUser } = useAuth();
+
+  // Sign out on both platforms: Alert.alert buttons are inert on the web build.
+  const confirmLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (e) {
+      // Clearing local auth state still completes logout if the API is unavailable.
+    }
+    await logout?.();
+  };
+
+  const handleLogout = () => {
+    const message = 'Are you sure you want to log out of your Welfare account?';
+
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(message)) {
+        void confirmLogout();
+      }
+      return;
+    }
+
+    Alert.alert('Log Out', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: () => { void confirmLogout(); } },
+    ]);
+  };
 
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(profile || {});
@@ -607,10 +634,7 @@ const ProfileScreen = ({ navigation }) => {
               {/* ── Logout */}
               <TouchableOpacity
                 style={styles.logoutBtn}
-                onPress={() => Alert.alert('Log Out', 'Are you sure you want to log out?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Log Out', style: 'destructive', onPress: () => logout && logout() },
-                ])}
+                onPress={handleLogout}
                 activeOpacity={0.8}
               >
                 <View style={styles.logoutIconWrap}>

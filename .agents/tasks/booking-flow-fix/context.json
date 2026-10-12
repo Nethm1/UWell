@@ -1,0 +1,27 @@
+{
+  "project_type": "Node/Express + Prisma backend + React Native/Expo frontend",
+  "language": "JavaScript/TypeScript",
+  "build_system": "npm with nodemon for dev server",
+  "test_framework": "none configured",
+  "build_command": "npm run dev",
+  "test_command": "npm test (not configured)",
+  "verification_instructions": "1. Start backend with 'npm run dev' and verify no startup crash. 2. Test booking approval: login as counselor → approve pending appointment → login as student → verify 'Confirmed' status and notification received. 3. Test video call invite: counselor starts session → student receives socket invite → student can accept and join.",
+  "snapshot_or_generated_files": null,
+  "environment_constraints": "Ports 5000 and 8082 may be in use by other dev instances; kill existing processes or run on free port. No changes to port logic needed.",
+  "contribution_requirements": "Backend must start without crash. Frontend must use existing socketService.ts and navigation patterns. Follow existing file conventions (camelCase for JS, PascalCase for React components).",
+  "key_patterns": "Backend: use mongoose models in backend/src/models, controller pattern in backend/src/controllers, route registration in backend/server.js. Frontend: use React Navigation, socketService.ts for socket connections, existing patterns in counselor/ and student/ screen folders.",
+  "relevant_files": [
+    "backend/src/controllers/counselor/notificationController.js",
+    "backend/src/controllers/counselor/appointmentController.js",
+    "backend/src/routes/counselor/counselorRoutes.js",
+    "backend/src/services/notificationService.js (to create)",
+    "frontend/src/screens/counselor/AppointmentsScreen.jsx",
+    "frontend/src/screens/counselor/VideoSessionScreen.jsx",
+    "frontend/src/screens/student/my-appointments.tsx",
+    "frontend/src/screens/student/home.tsx",
+    "frontend/src/screens/student/booking-confirmation.tsx",
+    "frontend/src/screens/shared/VideoCallScreen.tsx",
+    "frontend/src/services/socketService.ts"
+  ],
+  "directory_structure": "UWell/backend/src/controllers/counselor/ contains notificationController.js, appointmentController.js, etc. UWell/backend/src/routes/counselor/ contains counselorRoutes.js. UWell/frontend/src/screens/ contains student/ and counselor/ subfolders with screens."
+}

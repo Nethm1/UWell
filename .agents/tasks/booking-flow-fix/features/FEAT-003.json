@@ -1,0 +1,25 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Implement 'New' badge for confirmed appointments and video call invite flow",
+  "status": "pending",
+  "steps": [
+    "Update frontend/src/screens/student/my-appointments.tsx to show 'New' badge for confirmed appointments created within last 24 hours",
+    "Add socket listener in frontend/src/screens/shared/VideoCallScreen.tsx for 'call-invite' event to show modal when counselor starts video session",
+    "Add 'New' visual indicator in frontend/src/screens/counselor/AppointmentsScreen.jsx for appointments newly approved (status changed from 'Pending' to 'Confirmed' in last 24h)",
+    "Add socket event 'student-joined-call' emitter in VideoCallScreen.tsx when student joins room, and receiver in counselor VideoSessionScreen.jsx to show 'Student joined' message"
+  ],
+  "acceptance_criteria": [
+    "Confirmed appointments created within 24 hours show a 'New' badge in student's My Appointments",
+    "Student receives real-time invite when counselor starts video session",
+    "Student can accept invite and join the same Jitsi room as counselor",
+    "Counselor sees confirmation when student joins the video call"
+  ],
+  "verification": [
+    "Login as student, create new confirmed appointment, verify 'New' badge appears for 24 hours",
+    "Login as counselor, start video session from an appointment, verify student receives invite",
+    "Student accepts invite, both join same room, counselor sees student joined notification"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

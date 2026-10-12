@@ -9,6 +9,7 @@ const studentController = require('../../controllers/counselor/studentController
 const messageController = require('../../controllers/counselor/messageController');
 const availabilityController = require('../../controllers/counselor/availabilityController');
 const videoSessionController = require('../../controllers/counselor/videoSessionController');
+const notificationController = require('../../controllers/counselor/notificationController');
 
 // All counselor-module routes require a valid JWT.
 router.use(protect, authorise('counselor'));
@@ -47,5 +48,10 @@ router.delete('/availability/:id', availabilityController.deleteAvailability);
 
 // Video session placeholder
 router.post('/video-session/start', videoSessionController.startVideoSession);
+
+// Notifications
+router.get('/notifications', notificationController.getCounselorNotifications);
+router.get('/notifications/unread-count', notificationController.getUnreadCount);
+router.put('/notifications/:id/read', notificationController.markAsRead);
 
 module.exports = router;
