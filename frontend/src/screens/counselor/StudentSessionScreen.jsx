@@ -13,9 +13,11 @@ import {
   Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 import Card from '../../components/common/Card';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
+import CounselorBackButton from '../../components/navigation/CounselorBackButton';
 import { counselorService } from '../../services/counselorService';
 
 const StudentSessionScreen = ({ route, navigation }) => {
@@ -64,12 +66,34 @@ const StudentSessionScreen = ({ route, navigation }) => {
     }
   };
 
+  const openContact = async (scheme, value) => {
+    if (!value) {
+      const message = scheme === 'mailto' ? 'No email address is saved for this student.' : 'No phone number is saved for this student.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(message);
+      else Alert.alert('Contact information unavailable', message);
+      return;
+    }
+    try {
+      await Linking.openURL(`${scheme}:${value}`);
+    } catch {
+      const message = scheme === 'mailto' ? 'Could not open your email app.' : 'Could not open the phone dialer.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(message);
+      else Alert.alert('Could not open contact', message);
+    }
+  };
+
   if (isLoading) {
-    return <View style={styles.loadingState}><ActivityIndicator color={colors.primary} /><Text style={styles.loadingText}>Loading student record…</Text></View>;
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <CounselorBackButton navigation={navigation} style={styles.stateBackButton} />
+        <View style={styles.loadingState}><ActivityIndicator color={colors.primary} /><Text style={styles.loadingText}>Loading student record…</Text></View>
+      </SafeAreaView>
+    );
   }
   if (!student) {
     return (
       <SafeAreaView style={styles.safeArea}>
+        <CounselorBackButton navigation={navigation} style={styles.stateBackButton} />
         <View style={styles.unavailableState}>
           <Text style={styles.unavailableTitle}>Student record unavailable</Text>
           <Text style={styles.unavailableText}>{loadError || 'This student may not be linked to your account.'}</Text>
@@ -114,13 +138,7 @@ const StudentSessionScreen = ({ route, navigation }) => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.creamBackground} />
       {/* Header bar */}
       <View style={styles.topHeader}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backBtn}
-          accessibilityLabel="Go back"
-        >
-          <Text style={styles.backBtnText}>←</Text>
-        </TouchableOpacity>
+        <CounselorBackButton navigation={navigation} style={styles.backBtn} />
         <Text style={styles.headerTitle}>Student Profile</Text>
         <View style={{ width: 32 }} />
       </View>
@@ -133,6 +151,7 @@ const StudentSessionScreen = ({ route, navigation }) => {
         {/* Profile Card */}
         <Card style={styles.profileHeaderCard}>
           <ImagePlaceholder
+            source={student.profilePicture ? { uri: student.profilePicture } : undefined}
             initials={student.avatarInitials || student.name.substring(0, 2)}
             size={64}
           />
@@ -149,6 +168,39 @@ const StudentSessionScreen = ({ route, navigation }) => {
             🔒 All session information is strictly confidential.
           </Text>
         </View>
+
+        <Card style={styles.detailsCard}>
+          <Text style={styles.detailsHeading}>CONTACT INFORMATION</Text>
+          <TouchableOpacity style={styles.contactRow} onPress={() => openContact('mailto', student.email)} accessibilityRole="button" accessibilityLabel={`Email ${student.name}`}>
+            <View style={styles.contactIcon}><Feather name="mail" size={16} color={colors.primary} /></View>
+            <View style={styles.contactCopy}><Text style={styles.detailLabel}>Email</Text><Text style={styles.detailValue}>{student.email || 'Not provided'}</Text></View>
+            {student.email ? <Feather name="external-link" size={15} color={colors.textSecondary} /> : null}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.contactRow} onPress={() => openContact('tel', student.phone)} accessibilityRole="button" accessibilityLabel={`Call ${student.name}`}>
+            <View style={styles.contactIcon}><Feather name="phone" size={16} color={colors.primary} /></View>
+            <View style={styles.contactCopy}><Text style={styles.detailLabel}>Phone</Text><Text style={styles.detailValue}>{student.phone || 'Not provided'}</Text></View>
+            {student.phone ? <Feather name="external-link" size={15} color={colors.textSecondary} /> : null}
+          </TouchableOpacity>
+        </Card>
+
+        <Card style={styles.detailsCard}>
+          <Text style={styles.detailsHeading}>STUDENT DETAILS</Text>
+          {[
+            ['Student ID', student.studentNumber],
+            ['Course', student.yearCourse],
+            ['Faculty', student.faculty],
+            ['Program', student.degreeProgram],
+            ['Year', student.yearOfStudy],
+            ['About', student.bio],
+            ['Record status', student.status],
+            ['Completed sessions', student.sessionsCompleted],
+          ].filter(([, value]) => value !== undefined && value !== null && value !== '').map(([label, value]) => (
+            <View key={label} style={styles.detailRow}>
+              <Text style={styles.detailLabel}>{label}</Text>
+              <Text style={styles.detailValue}>{value}</Text>
+            </View>
+          ))}
+        </Card>
 
         {/* Quick Action Buttons */}
         <View style={styles.actionButtonsRow}>
@@ -261,6 +313,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.creamBackground
   },
+  stateBackButton: { marginLeft: 12, marginTop: 4 },
   container: {
     flex: 1,
     backgroundColor: colors.creamBackground
@@ -281,11 +334,6 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     padding: spacing.xs
-  },
-  backBtnText: {
-    fontSize: 22,
-    color: colors.primary,
-    fontWeight: 'bold'
   },
   headerTitle: {
     fontSize: typography.fontSize.lg,
@@ -326,6 +374,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     alignItems: 'center'
   },
+  detailsCard: { marginTop: spacing.md, marginBottom: spacing.md, padding: spacing.md },
+  detailsHeading: { color: colors.textSecondary, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, marginBottom: 8 },
+  contactRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border },
+  contactIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.softCoral, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  contactCopy: { flex: 1 },
+  detailRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border },
+  detailLabel: { width: 92, color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  detailValue: { flex: 1, color: colors.darkText, fontSize: 12, lineHeight: 18 },
   confidentialityText: {
     fontSize: typography.fontSize.xs,
     color: colors.statusYellowText,

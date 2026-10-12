@@ -1,41 +1,31 @@
 import api from './api';
-import {
-  initialCounselorProfile,
-  initialPerformanceStats,
-} from '../data/counselorMockData';
-
-// Local reactive storage for development & offline mode
-let profileData = { ...initialCounselorProfile };
-
 export const counselorService = {
   // Counselor Profile
   getCounselorProfile: async () => {
-    try {
-      const response = await api.get('/counselor/profile');
-      return response.data;
-    } catch (error) {
-      return profileData;
-    }
+    const response = await api.get('/counselor/profile');
+    return response.data?.data || response.data;
   },
 
   updateCounselorProfile: async (updatedData) => {
-    try {
-      const response = await api.put('/counselor/profile', updatedData);
-      return response.data;
-    } catch (error) {
-      profileData = { ...profileData, ...updatedData };
-      return profileData;
-    }
+    const response = await api.put('/counselor/profile', updatedData);
+    return response.data?.data || response.data;
+  },
+
+  // Keep office-location save failures visible to the profile controls.
+  saveOfficeLocation: async (officeLocation) => {
+    const response = await api.put('/counselor/profile', { officeLocation });
+    return response.data?.data || response.data;
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    const response = await api.put('/counselor/change-password', { currentPassword, newPassword });
+    return response.data;
   },
 
   // Performance Stats
   getPerformanceStats: async () => {
-    try {
-      const response = await api.get('/counselor/stats');
-      return response.data;
-    } catch (error) {
-      return initialPerformanceStats;
-    }
+    const response = await api.get('/counselor/stats');
+    return response.data?.data || response.data;
   },
 
   // Appointments
@@ -49,8 +39,14 @@ export const counselorService = {
     return response.data;
   },
 
-  updateAppointmentStatus: async (appointmentId, status) => {
-    const response = await api.put(`/counselor/appointments/${appointmentId}`, { status });
+  updateAppointmentStatus: async (appointmentId, changes) => {
+    const payload = typeof changes === 'string' ? { status: changes } : changes;
+    const response = await api.put(`/counselor/appointments/${appointmentId}`, payload);
+    return response.data;
+  },
+
+  getAvailability: async () => {
+    const response = await api.get('/counselor/availability');
     return response.data;
   },
 

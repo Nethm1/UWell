@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import CounselorBackButton from '../../components/navigation/CounselorBackButton';
 import { initialClinicalFocusAreas } from '../../data/counselorMockData';
 
 const { width } = Dimensions.get('window');
@@ -221,14 +222,7 @@ const ClinicalFocusAreasScreen = ({ navigation }) => {
 
       {/* ── Top nav bar ──────────────────────────────────────── */}
       <View style={styles.navBar}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-        >
-          <Feather name="chevron-left" size={22} color={colors.darkText} />
-        </TouchableOpacity>
+        <CounselorBackButton navigation={navigation} style={styles.backBtn} />
 
         <Text style={styles.navLabel}>SUPPORT AREAS</Text>
 

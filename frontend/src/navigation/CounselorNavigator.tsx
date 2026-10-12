@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,8 +13,11 @@ import MessagesScreen from '../screens/counselor/MessagesScreen';
 import StudentChatScreen from '../screens/counselor/StudentChatScreen';
 import ProfileScreen from '../screens/counselor/ProfileScreen';
 import EditProfileScreen from '../screens/counselor/EditProfileScreen';
+import ChangePasswordScreen from '../screens/counselor/ChangePasswordScreen';
 import ClinicalFocusAreasScreen from '../screens/counselor/ClinicalFocusAreasScreen';
 import FocusAreaDetailScreen from '../screens/counselor/FocusAreaDetailScreen';
+import CounselorSettingsScreen from '../screens/counselor/CounselorSettingsScreen';
+import CounselorNotificationsScreen from '../screens/counselor/CounselorNotificationsScreen';
 import VideoSessionScreen from '../screens/counselor/VideoSessionScreen';
 import VideoCallScreen from '../screens/shared/VideoCallScreen';
 import { colors } from '../theme';
@@ -52,8 +56,11 @@ const ProfileStackScreen = () => (
   <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
     <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
     <ProfileStack.Screen name="EditProfile" component={EditProfileScreen} />
+    <ProfileStack.Screen name="ChangePassword" component={ChangePasswordScreen} />
     <ProfileStack.Screen name="ClinicalFocusAreas" component={ClinicalFocusAreasScreen} />
     <ProfileStack.Screen name="FocusAreaDetail" component={FocusAreaDetailScreen} />
+    <ProfileStack.Screen name="CounselorSettings" component={CounselorSettingsScreen} />
+    <ProfileStack.Screen name="CounselorNotifications" component={CounselorNotificationsScreen} />
   </ProfileStack.Navigator>
 );
 
@@ -91,7 +98,7 @@ const CounselorNavigator = () => {
             const IconComponent = tabIconMap[route.name];
             return IconComponent ? IconComponent(props) : null;
           },
-          tabBarActiveTintColor: colors.primary,
+          tabBarActiveTintColor: '#0865D9',
           tabBarInactiveTintColor: colors.textSecondary,
           tabBarStyle: {
             backgroundColor: colors.white,
@@ -117,7 +124,17 @@ const CounselorNavigator = () => {
         />
         <Tab.Screen name="Students" component={StudentsStackScreen} />
         <Tab.Screen name="Messages" component={MessagesStackScreen} />
-        <Tab.Screen name="Profile" component={ProfileStackScreen} />
+        <Tab.Screen
+          name="Profile"
+          component={ProfileStackScreen}
+          options={({ route }) => {
+            const childRoute = getFocusedRouteNameFromRoute(route) || 'ProfileMain';
+            return childRoute === 'EditProfile' ? { tabBarStyle: { display: 'none' } } : {};
+          }}
+          listeners={({ navigation }) => ({
+            tabPress: () => navigation.navigate('Profile', { screen: 'ProfileMain' }),
+          })}
+        />
       </Tab.Navigator>
     </View>
   );

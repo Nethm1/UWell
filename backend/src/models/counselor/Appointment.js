@@ -42,6 +42,12 @@ const appointmentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    duration: {
+      type: Number,
+      default: 30,
+      min: 5,
+      max: 240,
+    },
     sessionType: {
       type: String,
       enum: ['Online', 'In Person', 'Phone'],

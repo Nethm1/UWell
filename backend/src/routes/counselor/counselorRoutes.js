@@ -19,6 +19,7 @@ router.use(ensureCounselorSeed);
 // Profile & stats
 router.get('/profile', profileController.getProfile);
 router.put('/profile', profileController.updateProfile);
+router.put('/change-password', profileController.changePassword);
 router.get('/stats', profileController.getStats);
 
 // Appointments

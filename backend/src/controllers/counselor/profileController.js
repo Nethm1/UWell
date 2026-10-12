@@ -1,163 +1,157 @@
-const CounselorProfile = require('../../models/counselor/CounselorProfile');
 const Counselor = require('../../models/counselor/Counselor');
+const CounselorProfile = require('../../models/counselor/CounselorProfile');
 const CounselorAppointment = require('../../models/counselor/CounselorAppointment');
 const CounselorStudent = require('../../models/counselor/CounselorStudent');
-const { SEED_COUNSELOR_ID, counselorKey } = require('./_scope');
 
-const DEFAULT_PROFILE = {
-  _id: 'c1',
-  name: 'Dr. Evelyn Martinez, PhD',
-  title: 'Senior Student Cognitive Psychologist',
-  role: 'CLINICAL STAFF',
-  rating: 4.9,
-  sessionsReviewed: 148,
-  qualification: 'PhD in Clinical Psychology, Stanford',
-  specialization: 'Cognitive Behavioral Therapy (CBT)',
-  clinicalFocus: ['Academic Burnout', 'ADHD Management', 'Anxiety Disorder', 'Social Adjustment'],
-  officeLocation: 'Clinic Hall B, Room 302',
-  email: 'e.martinez@university.edu',
-  avatarInitials: 'EM',
-  profileImage: '',
-  bio: 'Dedicated senior psychologist with over 10 years of experience supporting university students through academic, emotional, and social challenges.',
-};
+const counselorIdFor = (req) => String(req.user?.id || '');
 
-const deriveInitials = (counselor) => {
-  const initials = `${(counselor.firstName || '')[0] || ''}${(counselor.lastName || '')[0] || ''}`;
-  return initials.toUpperCase() || DEFAULT_PROFILE.avatarInitials;
-};
-
-// Build a per-counselor profile from the authenticated Counselor account,
-// filling the counselor-module presentation fields from the seeded defaults.
-const buildDerivedProfile = (key, counselor) => ({
-  _id: key,
-  name: `${counselor.firstName || ''} ${counselor.lastName || ''}`.trim() || DEFAULT_PROFILE.name,
-  title: DEFAULT_PROFILE.title,
-  role: DEFAULT_PROFILE.role,
-  rating: DEFAULT_PROFILE.rating,
-  sessionsReviewed: DEFAULT_PROFILE.sessionsReviewed,
-  qualification: counselor.qualification || DEFAULT_PROFILE.qualification,
-  specialization: counselor.specialization || DEFAULT_PROFILE.specialization,
-  clinicalFocus:
-    Array.isArray(counselor.clinicalFocus) && counselor.clinicalFocus.length
-      ? counselor.clinicalFocus
-      : counselor.specialization
-        ? [counselor.specialization]
-        : DEFAULT_PROFILE.clinicalFocus,
-  officeLocation: counselor.officeLocation || DEFAULT_PROFILE.officeLocation,
-  email: counselor.email || DEFAULT_PROFILE.email,
-  avatarInitials: deriveInitials(counselor),
+const serializeProfile = (counselor, profile = null) => ({
+  ...(profile?.toObject ? profile.toObject() : profile || {}),
+  _id: String(counselor._id),
+  id: String(counselor._id),
+  name: counselor.fullName,
+  title: counselor.role === 'counselor' ? 'University Counselor' : counselor.role,
+  qualification: counselor.qualification,
+  specialization: counselor.specialization,
+  clinicalFocus: Array.isArray(profile?.clinicalFocus) && profile.clinicalFocus.length
+    ? profile.clinicalFocus
+    : counselor.specialization ? [counselor.specialization] : [],
+  officeLocation: counselor.officeLocation || '',
+  email: counselor.email,
+  phone: counselor.phone,
+  status: counselor.status || 'Available',
+  role: counselor.role || 'counselor',
   profileImage: counselor.profileImage || '',
-  bio: counselor.bio || DEFAULT_PROFILE.bio,
+  bio: counselor.bio || '',
+  avatarInitials: `${counselor.firstName?.[0] || ''}${counselor.lastName?.[0] || ''}`.toUpperCase(),
 });
 
-// Resolve the profile document for the authenticated counselor, deriving one
-// from their account on first access and falling back to the seeded profile
-// only when no matching Counselor account exists (e.g. dev tokens).
-const resolveProfile = async (key) => {
-  const existing = await CounselorProfile.findById(key);
-  if (existing) return existing;
-
-  const counselor = await Counselor.findById(key).catch(() => null);
-  if (counselor) {
-    return CounselorProfile.create(buildDerivedProfile(key, counselor));
-  }
-
-  let seeded = await CounselorProfile.findById(SEED_COUNSELOR_ID);
-  if (!seeded) {
-    seeded = await CounselorProfile.create(DEFAULT_PROFILE);
-  }
-  return seeded;
-};
-
-// GET /api/counselor/profile
+// GET /api/counselor/profile. Identity and contact data always come from the
+// authenticated Counselor document; the presentation document is optional.
 exports.getProfile = async (req, res) => {
   try {
-    const profile = await resolveProfile(counselorKey(req));
-    return res.status(200).json(profile);
+    const id = counselorIdFor(req);
+    const counselor = await Counselor.findById(id);
+    if (!counselor) return res.status(404).json({ success: false, message: 'Counselor account not found' });
+    const profile = await CounselorProfile.findById(id);
+    return res.status(200).json(serializeProfile(counselor, profile));
   } catch (error) {
-    console.error('❌ counselor getProfile error:', error);
+    console.error('Counselor getProfile error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch counselor profile' });
   }
 };
 
-// PUT /api/counselor/profile
+// PUT /api/counselor/profile. The route is protected and updates only req.user.id.
 exports.updateProfile = async (req, res) => {
   try {
-    const allowed = [
-      'name',
-      'title',
-      'qualification',
-      'specialization',
-      'clinicalFocus',
-      'officeLocation',
-      'email',
-      'avatarInitials',
-      'profileImage',
-      'bio',
-      'rating',
-      'sessionsReviewed',
-    ];
+    const id = counselorIdFor(req);
+    const counselor = await Counselor.findById(id);
+    if (!counselor) return res.status(404).json({ success: false, message: 'Counselor account not found' });
 
     const updates = {};
-    allowed.forEach((field) => {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
-    });
+    const allowed = ['email', 'phone', 'qualification', 'specialization', 'profileImage', 'bio', 'officeLocation'];
+    allowed.forEach((field) => { if (req.body[field] !== undefined) updates[field] = req.body[field]; });
 
-    if (updates.profileImage !== undefined && updates.profileImage !== '') {
-      const imageData = String(updates.profileImage);
-      const isImageDataUri = /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(imageData);
-      if (!isImageDataUri || imageData.length > 7 * 1024 * 1024) {
-        return res.status(400).json({
-          success: false,
-          message: 'Upload a JPG, PNG, or WebP profile photo smaller than 4 MB',
-        });
+    if (req.body.name !== undefined) {
+      const parts = String(req.body.name).trim().split(/\s+/).filter(Boolean);
+      if (parts.length < 2) return res.status(400).json({ success: false, message: 'Enter your first and last name.' });
+      updates.firstName = parts.shift();
+      updates.lastName = parts.join(' ');
+    }
+    if (!Object.keys(updates).length) return res.status(400).json({ success: false, message: 'No profile fields were provided.' });
+
+    if (updates.email !== undefined) updates.email = String(updates.email).trim().toLowerCase();
+    if (updates.phone !== undefined) updates.phone = String(updates.phone).trim();
+    for (const field of ['qualification', 'specialization']) {
+      if (updates[field] !== undefined) updates[field] = String(updates[field]).trim();
+    }
+    if (updates.bio !== undefined) updates.bio = String(updates.bio).trim();
+    if (updates.officeLocation !== undefined) updates.officeLocation = String(updates.officeLocation).trim();
+    if (req.body.clinicalFocus !== undefined) {
+      if (!Array.isArray(req.body.clinicalFocus) || req.body.clinicalFocus.length > 20 || req.body.clinicalFocus.some((item) => typeof item !== 'string' || item.length > 100)) {
+        return res.status(400).json({ success: false, message: 'Clinical focus areas must be a list of up to 20 short text values.' });
       }
     }
 
-    const key = counselorKey(req);
-    let profile = await resolveProfile(key);
-    if (String(profile._id) !== key) {
-      profile = await CounselorProfile.create({ ...profile.toJSON(), _id: key });
+    if (updates.email && !/^\S+@\S+\.\S+$/.test(updates.email)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid email address.' });
+    }
+    if (updates.phone !== undefined && !updates.phone) {
+      return res.status(400).json({ success: false, message: 'Phone number is required.' });
+    }
+    if (updates.phone !== undefined && (updates.phone.length < 7 || updates.phone.length > 25)) {
+      return res.status(400).json({ success: false, message: 'Phone number must be 7 to 25 characters.' });
+    }
+    if (updates.profileImage !== undefined && updates.profileImage !== '') {
+      const image = String(updates.profileImage);
+      if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(image) || image.length > 7 * 1024 * 1024) {
+        return res.status(400).json({ success: false, message: 'Upload a JPG, PNG, or WebP profile photo smaller than 4 MB.' });
+      }
     }
 
-    profile.set(updates);
-    await profile.save();
-    if (updates.profileImage !== undefined) {
-      await Counselor.findByIdAndUpdate(key, { $set: { profileImage: updates.profileImage } }).catch(() => null);
+    Object.assign(counselor, updates);
+    await counselor.save();
+
+    const profileUpdates = {};
+    if (updates.firstName || updates.lastName) profileUpdates.name = counselor.fullName;
+    for (const field of ['email', 'qualification', 'specialization', 'profileImage', 'bio', 'officeLocation']) {
+      if (updates[field] !== undefined) profileUpdates[field] = updates[field];
     }
-    return res.status(200).json(profile);
+    if (req.body.clinicalFocus !== undefined) profileUpdates.clinicalFocus = req.body.clinicalFocus.map((item) => item.trim()).filter(Boolean);
+    if (Object.keys(profileUpdates).length) {
+      await CounselorProfile.findOneAndUpdate(
+        { _id: id },
+        { $set: profileUpdates },
+        { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+      );
+    }
+
+    const profile = await CounselorProfile.findById(id);
+    return res.status(200).json({ success: true, message: 'Profile updated successfully.', data: serializeProfile(counselor, profile) });
   } catch (error) {
-    console.error('❌ counselor updateProfile error:', error);
+    if (error.code === 11000) return res.status(409).json({ success: false, message: 'That email address is already in use.' });
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ success: false, message: Object.values(error.errors).map((item) => item.message).join(' ') });
+    }
+    console.error('Counselor updateProfile error:', error);
     return res.status(500).json({ success: false, message: 'Failed to update counselor profile' });
+  }
+};
+
+// PUT /api/counselor/change-password
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) return res.status(400).json({ success: false, message: 'Current and new passwords are required.' });
+    if (String(newPassword).length < 8) return res.status(400).json({ success: false, message: 'New password must be at least 8 characters.' });
+    if (currentPassword === newPassword) return res.status(400).json({ success: false, message: 'Choose a new password different from your current password.' });
+
+    const counselor = await Counselor.findById(counselorIdFor(req)).select('+password');
+    if (!counselor) return res.status(404).json({ success: false, message: 'Counselor account not found.' });
+    if (!(await counselor.comparePassword(currentPassword))) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+    }
+    counselor.password = newPassword;
+    await counselor.save();
+    return res.status(200).json({ success: true, message: 'Password changed successfully.' });
+  } catch (error) {
+    console.error('Counselor changePassword error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to change password.' });
   }
 };
 
 // GET /api/counselor/stats
 exports.getStats = async (req, res) => {
   try {
-    const key = counselorKey(req);
+    const key = counselorIdFor(req);
     const [activeCases, thisWeekSessions, pendingRequests] = await Promise.all([
       CounselorStudent.countDocuments({ counselorId: key, status: { $ne: 'Archived' } }),
-      CounselorAppointment.countDocuments({
-        counselorId: key,
-        status: { $in: ['Confirmed', 'Completed'] },
-        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-      }),
+      CounselorAppointment.countDocuments({ counselorId: key, status: { $in: ['Confirmed', 'Completed'] }, createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }),
       CounselorAppointment.countDocuments({ counselorId: key, status: 'Pending' }),
     ]);
-    const stats = {
-      activeCases,
-      thisWeekSessions,
-      pendingRequests,
-      summary: pendingRequests
-        ? `You have ${pendingRequests} booking request${pendingRequests === 1 ? '' : 's'} to review.`
-        : activeCases
-          ? `You are supporting ${activeCases} active student${activeCases === 1 ? '' : 's'}.`
-          : 'New student bookings will appear here.',
-    };
-    return res.status(200).json(stats);
+    return res.status(200).json({ activeCases, thisWeekSessions, pendingRequests });
   } catch (error) {
-    console.error('❌ counselor getStats error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to fetch stats' });
+    console.error('Counselor getStats error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch counselor statistics' });
   }
 };

@@ -9,6 +9,9 @@ const toConversationSummary = (student, conversation) => ({
   studentId: student.id,
   counselorId: student.counselorId,
   studentName: student.name,
+  sourceStudentId: student.sourceStudentId || '',
+  email: student.email || '',
+  phone: student.phone || '',
   avatarInitials: student.avatarInitials,
   lastMessage: conversation?.lastMessage || 'Start a conversation',
   timestamp: conversation?.timestamp || '',
@@ -43,11 +46,16 @@ exports.getMessageByStudentId = async (req, res) => {
     if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
 
     const client = student.toJSON();
-    const conversation = await CounselorMessage.findOne({
-      studentId: client.id,
-      counselorId: key,
-    });
-    return res.status(200).json(toConversationSummary(client, conversation?.toJSON()));
+    const [conversation, sourceStudent] = await Promise.all([
+      CounselorMessage.findOne({ studentId: client.id, counselorId: key }),
+      client.sourceStudentId ? Student.findById(client.sourceStudentId).select('email phone') : null,
+    ]);
+    const summary = toConversationSummary({
+      ...client,
+      email: sourceStudent?.email || client.email,
+      phone: sourceStudent?.phone || '',
+    }, conversation?.toJSON());
+    return res.status(200).json(summary);
   } catch (error) {
     console.error('counselor getMessageByStudentId error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch conversation' });

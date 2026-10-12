@@ -586,6 +586,30 @@ app.use((req, res) => {
 const PORT     = parseInt(process.env.PORT, 10)     || 5000;
 const ALT_PORT = parseInt(process.env.ALT_PORT, 10) || 8082;
 
+// Avoid launching a second copy on the mobile-facing port. In dev, this can
+// happen when a terminal loses track of the process that is already serving
+// Expo devices. Only treat a listener as ours when it answers the UWell health
+// endpoint; an unrelated service must still produce the normal port error.
+function isUWellAlreadyRunning(port) {
+  return new Promise((resolve) => {
+    const request = http.get({ hostname: '127.0.0.1', port, path: '/api/health', timeout: 1200 }, (response) => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { body += chunk; });
+      response.on('end', () => {
+        try {
+          const health = JSON.parse(body);
+          resolve(response.statusCode === 200 && health.status === 'OK' && health.message === 'UWell Backend API is running');
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+    request.on('timeout', () => request.destroy());
+    request.on('error', () => resolve(false));
+  });
+}
+
 // ── listen helper ─────────────────────────────────────────────────────────────
 // httpServer owns socket.io and listens on ALT_PORT (mobile-facing).
 // PORT gets a separate plain server via app.listen().
@@ -615,19 +639,35 @@ function listen(port, label) {
 
 async function startServers() {
   try {
+    if (ALT_PORT && await isUWellAlreadyRunning(ALT_PORT)) {
+      console.log(`✅ UWell Backend is already responding on http://127.0.0.1:${ALT_PORT}; skipping duplicate startup.`);
+      return;
+    }
+
     await connectDB();
 
     // The mobile app uses ALT_PORT; PORT remains available for local/API clients.
     // A busy optional primary port must not prevent the mobile API/socket server
     // from starting on ALT_PORT.
+    let primaryServer = null;
     try {
-      await listen(PORT, 'UWell Backend');
+      primaryServer = await listen(PORT, 'UWell Backend');
     } catch (error) {
       if (error.code !== 'EADDRINUSE' || PORT === ALT_PORT) throw error;
       console.warn(`⚠️ Port ${PORT} is already in use; continuing with port ${ALT_PORT}.`);
     }
     if (ALT_PORT && ALT_PORT !== PORT) {
-      await listen(ALT_PORT, 'UWell Backend (Firewall-friendly port)');
+      try {
+        await listen(ALT_PORT, 'UWell Backend (Firewall-friendly port)');
+      } catch (error) {
+        // Another dev terminal may have started UWell after our health probe.
+        if (error.code === 'EADDRINUSE' && await isUWellAlreadyRunning(ALT_PORT)) {
+          if (primaryServer) await new Promise((resolve) => primaryServer.close(resolve));
+          console.log(`✅ UWell Backend is already responding on http://127.0.0.1:${ALT_PORT}; skipping duplicate startup.`);
+          return;
+        }
+        throw error;
+      }
     }
 
     console.log('   Health → GET /api/health');

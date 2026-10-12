@@ -11,12 +11,16 @@ const Counselor = require('../../models/counselor/Counselor');
 exports.createAppointment = async (req, res) => {
   try {
     const { counselorId, counselorName, counselorSpecialization, date, time, sessionType, notes } = req.body;
+    const requestedDuration = Number(req.body.duration || 30);
 
     if (!counselorName || !date || !time) {
       return res.status(400).json({
         success: false,
         message: 'Counselor name, date, and time are required',
       });
+    }
+    if (!Number.isInteger(requestedDuration) || requestedDuration < 5 || requestedDuration > 240) {
+      return res.status(400).json({ success: false, message: 'Appointment duration must be between 5 and 240 minutes.' });
     }
 
     // Create student-side appointment
@@ -27,6 +31,7 @@ exports.createAppointment = async (req, res) => {
       counselorSpecialization:  counselorSpecialization || 'Student Counselling',
       date,
       time,
+      duration: requestedDuration,
       sessionType:  sessionType || 'Online',
       notes:        notes || '',
       status:       'upcoming',
@@ -130,7 +135,9 @@ exports.createAppointment = async (req, res) => {
             counselorId: targetCounselorId,
             counselorName: counselorName || '',
             studentName,
+            studentRegistrationId: student?.studentId || '',
             studentCourse,
+            duration: requestedDuration,
             sessionType: sessionType || 'Online',
             date,
             time,

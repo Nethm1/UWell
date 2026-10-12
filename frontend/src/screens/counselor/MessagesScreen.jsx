@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
+import CounselorBackButton from '../../components/navigation/CounselorBackButton';
 import { counselorService } from '../../services/counselorService';
 
 const formatTimestamp = (value) => {
@@ -105,6 +106,7 @@ const MessagesScreen = ({ navigation }) => {
           onRefresh={loadMessages}
           ListHeaderComponent={(
             <View>
+              <CounselorBackButton navigation={navigation} style={styles.backButton} />
               <View style={styles.titleRow}>
                 <View style={styles.titleIcon}><Ionicons name="chatbubbles" size={21} color="#fff" /></View>
                 <View style={{ flex: 1 }}>
@@ -151,6 +153,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FB' },
   container: { flex: 1 },
   listContent: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 16 },
+  backButton: { marginLeft: -6, marginBottom: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 17 },
   titleIcon: { width: 45, height: 45, borderRadius: 15, backgroundColor: '#7A69C8', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   headerTitle: { color: '#24364A', fontSize: 25, fontWeight: '800' },

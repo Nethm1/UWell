@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { colors, spacing, typography } from '../../theme';
 import ImagePlaceholder from '../../components/common/ImagePlaceholder';
+import CounselorBackButton from '../../components/navigation/CounselorBackButton';
 import { counselorService } from '../../services/counselorService';
 import { studentService } from '../../services/studentService';
 import { useAuth } from '../../context/AuthContext';
@@ -46,6 +47,10 @@ const ACCEPTED_ATTACHMENT_TYPES = new Set([
 const showError = (message) => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(message);
   else Alert.alert('Attachment unavailable', message);
+};
+const showActionError = (message) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') window.alert(message);
+  else Alert.alert('Contact unavailable', message);
 };
 
 const StudentChatScreen = ({ route, navigation }) => {
@@ -167,6 +172,29 @@ const StudentChatScreen = ({ route, navigation }) => {
     }
   };
 
+  const openStudentContact = async (scheme, value) => {
+    if (!value) {
+      showActionError(scheme === 'mailto' ? 'No email address is saved for this student.' : 'No phone number is saved for this student.');
+      return;
+    }
+    try {
+      await Linking.openURL(`${scheme}:${value}`);
+    } catch {
+      showActionError(scheme === 'mailto' ? 'Could not open your email app.' : 'Could not open the phone dialer.');
+    }
+  };
+
+  const startVideoSession = () => {
+    if (!chatData?.sourceStudentId) {
+      showActionError('A linked student account is required to start a video session.');
+      return;
+    }
+    navigation.getParent()?.getParent()?.navigate('VideoSession', {
+      studentId: chatData.sourceStudentId,
+      studentName: chatData.studentName || studentName,
+    });
+  };
+
   const openAttachment = async (file) => {
     if (!file?.data) return;
     const dataUri = `data:${file.mimeType};base64,${file.data}`;
@@ -240,26 +268,46 @@ const StudentChatScreen = ({ route, navigation }) => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.creamBackground} />
       {/* Top Navigation Header */}
       <View style={styles.topHeader}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
+        <CounselorBackButton
+          navigation={navigation}
+          fallbackRoute={isStudent ? 'Counselors' : 'Dashboard'}
           style={styles.backBtn}
-          accessibilityLabel="Go back"
-        >
-          <Text style={styles.backBtnText}>←</Text>
-        </TouchableOpacity>
+        />
 
         <View style={styles.headerTitleCol}>
-          <Text style={styles.studentNameText}>{studentName}</Text>
+          {isStudent ? <Text style={styles.studentNameText}>{studentName}</Text> : (
+            <TouchableOpacity
+              onPress={() => navigation.getParent()?.navigate('Students', {
+                screen: 'StudentSession',
+                params: { studentId, studentName },
+              })}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${studentName}'s student details`}
+            >
+              <Text style={styles.studentNameText}>{studentName}</Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.statusOnlineRow}>
             <Ionicons name="lock-closed" size={10} color="#3973B9" style={{ marginRight: 4 }} />
             <Text style={styles.onlineText}>{isStudent ? 'Private chat · your counselor' : 'Private chat · booked student'}</Text>
           </View>
         </View>
 
-        <ImagePlaceholder
-          initials={isStudent ? (chatData?.counselorAvatarInitials || studentName.substring(0, 2)) : (chatData?.avatarInitials || studentName.substring(0, 2))}
-          size={36}
-        />
+        {isStudent ? (
+          <ImagePlaceholder initials={chatData?.counselorAvatarInitials || studentName.substring(0, 2)} size={36} />
+        ) : (
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.headerAction} onPress={() => openStudentContact('mailto', chatData?.email)} accessibilityRole="button" accessibilityLabel={`Email ${studentName}`}>
+              <Feather name="mail" size={17} color="#3973B9" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerAction} onPress={() => openStudentContact('tel', chatData?.phone)} accessibilityRole="button" accessibilityLabel={`Call ${studentName}`}>
+              <Feather name="phone" size={17} color="#3973B9" />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.headerAction, styles.videoHeaderAction]} onPress={startVideoSession} accessibilityRole="button" accessibilityLabel={`Start a video session with ${studentName}`}>
+              <Feather name="video" size={17} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <KeyboardAvoidingView
@@ -362,14 +410,14 @@ const styles = StyleSheet.create({
   backBtn: {
     padding: spacing.xs
   },
-  backBtnText: {
-    fontSize: 22,
-    color: colors.primary,
-    fontWeight: 'bold'
-  },
   headerTitleCol: {
-    alignItems: 'center'
+    flex: 1,
+    alignItems: 'flex-start',
+    marginHorizontal: 8,
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 5, marginLeft: 6 },
+  headerAction: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#EAF2FC', alignItems: 'center', justifyContent: 'center' },
+  videoHeaderAction: { backgroundColor: '#3973B9' },
   studentNameText: {
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
