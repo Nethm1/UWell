@@ -27,6 +27,9 @@ import WellbeingRecommendationScreen from '../screens/student/wellbeing-recommen
 import VideoSessionScreen from '../screens/student/video-session';
 import VideoCallScreen from '../screens/shared/VideoCallScreen';
 import CallRequestScreen from '../screens/student/CallRequestScreen';
+import WelfareDirectoryScreen from '../screens/student/welfare-directory';
+import WelfareProfileScreen from '../screens/student/welfare-profile';
+import WelfareChatScreen from '../screens/student/welfare-chat';
 import { tabScreenOptions } from './TabHelpers';
 
 const Tab = createBottomTabNavigator();
@@ -44,6 +47,9 @@ const HomeStackScreen = () => (
     <HomeStack.Screen name="ResourceDetails" component={ResourceDetailsScreen} />
     <HomeStack.Screen name="WellbeingCheck" component={WellbeingCheckScreen} />
     <HomeStack.Screen name="WellbeingRecommendation" component={WellbeingRecommendationScreen} />
+    <HomeStack.Screen name="WelfareDirectory" component={WelfareDirectoryScreen} />
+    <HomeStack.Screen name="WelfareProfile" component={WelfareProfileScreen} />
+    <HomeStack.Screen name="WelfareChat" component={WelfareChatScreen} />
   </HomeStack.Navigator>
 );
 
@@ -82,6 +88,9 @@ const SessionsStackScreen = () => (
     <SessionsStack.Screen name="BookAppointment" component={BookAppointmentScreen} />
     <SessionsStack.Screen name="ReviewBooking" component={ReviewBookingScreen} />
     <SessionsStack.Screen name="BookingConfirmed" component={BookingConfirmedScreen} />
+    <SessionsStack.Screen name="WelfareDirectory" component={WelfareDirectoryScreen} />
+    <SessionsStack.Screen name="WelfareProfile" component={WelfareProfileScreen} />
+    <SessionsStack.Screen name="WelfareChat" component={WelfareChatScreen} />
   </SessionsStack.Navigator>
 );
 
@@ -100,6 +109,9 @@ const ProfileStackScreen = () => (
     <ProfileStack.Screen name="Security" component={SecurityScreen} />
     <ProfileStack.Screen name="ChangePassword" component={ChangePasswordScreen} />
     <ProfileStack.Screen name="PrivacyInformation" component={PrivacyInformationScreen} />
+    <ProfileStack.Screen name="WelfareDirectory" component={WelfareDirectoryScreen} />
+    <ProfileStack.Screen name="WelfareProfile" component={WelfareProfileScreen} />
+    <ProfileStack.Screen name="WelfareChat" component={WelfareChatScreen} />
   </ProfileStack.Navigator>
 );
 

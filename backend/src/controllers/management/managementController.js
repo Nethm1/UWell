@@ -164,6 +164,7 @@ exports.getPendingRequests = async (req, res) => {
       officeLocation: w.officeLocation,
       department: w.department,
       position: w.position,
+      profilePicture: w.profilePicture || null,
       approvalStatus: w.approvalStatus,
       createdAt: w.createdAt,
     }));
@@ -236,6 +237,7 @@ exports.getAllRequests = async (req, res) => {
         officeLocation: w.officeLocation,
         department: w.department,
         position: w.position,
+        profilePicture: w.profilePicture || null,
         approvalStatus: w.approvalStatus,
         isApproved: w.isApproved,
         approvedAt: w.approvedAt,

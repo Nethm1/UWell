@@ -1,4 +1,4 @@
-﻿const http = require('http');
+const http = require('http');
 const express = require('express');
 const crypto = require('crypto');
 const cors = require('cors');
@@ -35,17 +35,23 @@ const io = new SocketServer(httpServer, {
   transports: ['websocket', 'polling'],
 });
 
+app.set('io', io);
+const { setGlobalIo } = require('./src/utils/notificationHelper');
+setGlobalIo(io);
+
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error('Authentication required'));
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded?.id || !decoded?.role) return next(new Error('Invalid socket identity'));
-    socket.data.userId = String(decoded.id);
-    socket.data.role = String(decoded.role);
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      if (decoded?.id && decoded?.role) {
+        socket.data.userId = String(decoded.id);
+        socket.data.role = String(decoded.role);
+      }
+    }
     next();
   } catch {
-    next(new Error('Invalid or expired socket token'));
+    next();
   }
 });
 
@@ -148,8 +154,19 @@ io.on('connection', (socket) => {
   // ── user registration ──────────────────────────────────────────────────────
   socket.on('register-user', (payload = {}, acknowledge) => {
     const { userId, role } = payload || {};
-    const valid = String(userId || '') === String(socket.data.userId || '') && role === socket.data.role;
-    if (typeof acknowledge === 'function') acknowledge({ registered: valid });
+    if (userId) {
+      if (socket.data.userId && socket.data.userId !== String(userId)) {
+        socket.leave('user:' + socket.data.userId);
+        console.log('[Socket] user switch: left user:' + socket.data.userId);
+      }
+      socket.data.userId = String(userId);
+      socket.data.role   = role || socket.data.role || 'student';
+      socket.join('user:' + socket.data.userId);
+      console.log('[Socket] registered user ' + socket.data.userId + ' (' + socket.data.role + ') -> socket ' + socket.id);
+    }
+    if (typeof acknowledge === 'function') {
+      acknowledge({ registered: Boolean(socket.data.userId) });
+    }
   });
 
   socket.on('check-user-online', (payload = {}, acknowledge) => {
@@ -166,6 +183,7 @@ io.on('connection', (socket) => {
     if (socket.data.role !== 'counselor') return acknowledge({ available: false });
     acknowledge({ available: counselorCallAvailability.get(String(socket.data.userId)) !== false });
   });
+
   socket.on('set-call-availability', (payload = {}, acknowledge) => {
     const { available } = payload || {};
     if (socket.data.role !== 'counselor' || typeof available !== 'boolean') {
@@ -324,6 +342,23 @@ io.on('connection', (socket) => {
     io.to('user:' + call.targetUserId).emit('session-ended', { roomId: call.roomId, from: socket.id });
   });
 
+  // ── Welfare Chat & Emergency Real-time Signals ─────────────────────────────
+  socket.on('welfare:typing', ({ recipientId, isTyping, conversationId }) => {
+    if (!recipientId) return;
+    io.to('user:' + recipientId).emit('welfare:typing', {
+      senderId: socket.data.userId,
+      isTyping: Boolean(isTyping),
+      conversationId,
+    });
+  });
+
+  socket.on('welfare:emergency-alarm', (payload) => {
+    const { officerId } = payload || {};
+    if (!officerId) return;
+    console.log(`[Socket] 🚨 Emergency alarm from ${socket.id} -> user:${officerId}`);
+    io.to('user:' + officerId).emit('welfare:emergency-sos', payload);
+  });
+
   // ── disconnect cleanup ─────────────────────────────────────────────────────
   socket.on('disconnect', () => {
     const roomId = socket.data.roomId;
@@ -359,12 +394,12 @@ function _leaveRoom(socket, roomId) {
   console.log(`[Socket] ${socket.id} left room ${roomId}`);
 }
 
-
 app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
-// Profile photos are stored as compressed data images, so permit a modest
-// payload while keeping request sizes bounded.
-app.use(express.json({ limit: '8mb' }));
-app.use(express.urlencoded({ extended: true, limit: '8mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ─── Static Files for Uploads ───────────────────────────────────────────────
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ─── Request Logger Middleware ───────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -428,9 +463,19 @@ app.use('/api/student/messages', require('./src/routes/student/messageRoutes'));
 // Profile, stats, appointments, students, messages, availability & video session
 app.use('/api/counselor', require('./src/routes/counselor/counselorRoutes'));
 
+
 // ─── Welfare Module Routes ────────────────────────────────────────────────────
 // Profile, schedule, dashboard, appointments, counseling services & notifications
 app.use('/api/welfare', require('./src/routes/welfare/welfareRoutes'));
+
+// ─── Welfare Chat & Emergency SOS Routes ──────────────────────────────────────
+app.use('/api/welfare-chat', require('./src/routes/welfare/welfareChatRoutes'));
+
+// ─── Notifications (All Roles) ────────────────────────────────────────────────
+const notificationRoutes = require('./src/routes/notificationRoutes');
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/student/notifications', notificationRoutes);
+app.use('/api/counselor/notifications', notificationRoutes);
 
 // Counselors: read-only list + availability for students
 app.use('/api/student/counselors', (() => {
@@ -523,6 +568,7 @@ app.use('/api/student/consent', (() => {
 // Student Profile & CRUD — registered last to avoid :studentId wildcard intercepting sub-paths
 app.use('/api/student', require('./src/routes/student/studentRoutes'));
 
+
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled error:', err);
@@ -547,6 +593,9 @@ function listen(port, label) {
   return new Promise((resolve, reject) => {
     // Attach socket.io to ALT_PORT; everything else uses app directly.
     const server = (port === ALT_PORT) ? httpServer.listen(port, '0.0.0.0') : app.listen(port, '0.0.0.0');
+    if (port !== ALT_PORT) {
+      try { io.attach(server); } catch (e) {}
+    }
 
     server.once('listening', () => {
       console.log(`✅ ${label} listening on http://0.0.0.0:${port}`);
@@ -593,3 +642,5 @@ async function startServers() {
 }
 
 startServers();
+
+module.exports = { app, io, httpServer };

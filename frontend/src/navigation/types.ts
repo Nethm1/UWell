@@ -29,6 +29,16 @@ export type StudentStackParamList = {
   };
   BookingConfirmed: { appointmentId: number };
   MySessions: undefined;
+  WelfareDirectory: undefined;
+  WelfareProfile: { officerId: string };
+  WelfareChat: {
+    officerId?: string;
+    conversationId?: string;
+    officerName?: string;
+    officerRole?: string;
+    officeLocation?: string;
+    emergencyPhone?: string;
+  };
 };
 
 export type WelfareTabParamList = {
