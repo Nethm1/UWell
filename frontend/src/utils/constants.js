@@ -32,13 +32,19 @@ import Constants from 'expo-constants';
 
 // ── Dynamic API Base URL ──────────────────────────────────────────────────
 // Automatically determines the correct IP address:
-// 1. EXPO_PUBLIC_API_URL env variable if provided.
-// 2. Dynamic host IP from Expo Go (Constants.expoConfig?.hostUri) so physical phones
-//    always connect to the host computer's current Wi-Fi IP automatically.
-// 3. Fallback to 192.168.1.12:8082 (port 8082 is allowed by Windows Firewall rule 8081-8112).
+// 1. Web uses the backend's IPv4 listener, separate from Expo's IPv6 web server.
+// 2. Native apps use EXPO_PUBLIC_API_URL when provided.
+// 3. Otherwise, native apps use the Expo host IP or a local-network fallback.
 const resolveApiBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+    const configuredUrl = process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
+    return configuredUrl.endsWith('/api') ? configuredUrl : `${configuredUrl}/api`;
+  }
+
+  if (Platform.OS === 'web') {
+    const host = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${protocol}//${host}:8082/api`;
   }
 
   // Detect IP from Expo Go Metro connection
@@ -49,15 +55,10 @@ const resolveApiBaseUrl = () => {
 
   const detectedIp = hostUri ? hostUri.split(':')[0] : null;
 
-  if (Platform.OS === 'web') {
-    return 'http://localhost:8082/api';
-  }
-
   const targetIp = detectedIp || '192.168.1.12';
   return `http://${targetIp}:8082/api`;
 };
 
 export const API_BASE_URL = resolveApiBaseUrl();
-
 
 

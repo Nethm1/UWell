@@ -10,7 +10,7 @@ import {
   ResponsiveScroll,
   SectionCard,
   Chip,
-  Banner,
+  Toast,
   LoadingState,
   EmptyState,
   ErrorState,
@@ -163,8 +163,6 @@ const UsageReportScreen = ({ navigation }) => {
       <NavigationHeader title="Usage Report" />
 
       <ResponsiveScroll>
-        {banner ? <Banner type={banner.type} message={banner.message} /> : null}
-
         <SectionCard title="Report filters" icon="sliders" iconTone="info">
           <Text style={styles.filterLabel}>Date range</Text>
           <View style={styles.chipRow}>
@@ -273,6 +271,8 @@ const UsageReportScreen = ({ navigation }) => {
           )}
         </SectionCard>
       </ResponsiveScroll>
+
+      {banner ? <Toast type={banner.type} message={banner.message} /> : null}
 
       <ConfirmModal
         visible={!!toDelete}

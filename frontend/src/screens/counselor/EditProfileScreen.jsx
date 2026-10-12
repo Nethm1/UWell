@@ -6,9 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Alert
+  Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography } from '../../theme';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
@@ -22,7 +24,9 @@ const EditProfileScreen = ({ navigation }) => {
   const [clinicalFocusText, setClinicalFocusText] = useState('');
   const [officeLocation, setOfficeLocation] = useState('');
   const [email, setEmail] = useState('');
+  const [profileImage, setProfileImage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [photoError, setPhotoError] = useState('');
 
   useEffect(() => {
     loadProfile();
@@ -37,6 +41,7 @@ const EditProfileScreen = ({ navigation }) => {
       setClinicalFocusText(data.clinicalFocus ? data.clinicalFocus.join(', ') : '');
       setOfficeLocation(data.officeLocation || '');
       setEmail(data.email || '');
+      setProfileImage(data.profileImage || '');
     }
   };
 
@@ -67,15 +72,77 @@ const EditProfileScreen = ({ navigation }) => {
       specialization: specialization.trim(),
       clinicalFocus: focusArray.length > 0 ? focusArray : ['Academic Burnout', 'Anxiety Disorder'],
       officeLocation: officeLocation.trim(),
-      email: email.trim()
+      email: email.trim(),
+      profileImage,
     };
 
-    await counselorService.updateCounselorProfile(updatedData);
-    setIsSaving(false);
+    try {
+      await counselorService.updateCounselorProfile(updatedData);
+      Alert.alert('Success', 'Profile updated successfully!', [
+        { text: 'OK', onPress: () => navigation.goBack() }
+      ]);
+    } catch (error) {
+      Alert.alert('Save failed', error.response?.data?.message || 'Could not save your profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-    Alert.alert('Success', 'Profile updated successfully!', [
-      { text: 'OK', onPress: () => navigation.goBack() }
-    ]);
+  const applyImageFile = (file) => {
+    if (!file || !file.type?.startsWith('image/')) {
+      setPhotoError('Choose an image file in JPG, PNG, or WebP format.');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setPhotoError('Choose an image smaller than 4 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfileImage(typeof reader.result === 'string' ? reader.result : '');
+      setPhotoError('');
+    };
+    reader.onerror = () => setPhotoError('Could not read this image. Please try another file.');
+    reader.readAsDataURL(file);
+  };
+
+  const handleWebDrop = (event) => {
+    event.preventDefault?.();
+    const file = event?.nativeEvent?.dataTransfer?.files?.[0] || event?.dataTransfer?.files?.[0];
+    applyImageFile(file);
+  };
+
+  const handlePickImage = async () => {
+    if (Platform.OS === 'web') {
+      // Expo opens the browser file chooser here; a photo can also be dropped on the card.
+    } else {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Photo permission required', 'Allow photo access to select a profile picture.');
+        return;
+      }
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    if (asset.fileSize && asset.fileSize > 4 * 1024 * 1024) {
+      setPhotoError('Choose an image smaller than 4 MB.');
+      return;
+    }
+    if (!asset.base64) {
+      setPhotoError('Could not prepare this image. Please choose another one.');
+      return;
+    }
+    setProfileImage(`data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`);
+    setPhotoError('');
   };
 
   return (
@@ -101,15 +168,26 @@ const EditProfileScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
       >
         <Card style={styles.avatarCard}>
-          <ImagePlaceholder
-            initials={name ? name.substring(0, 2) : 'EM'}
-            size={74}
-            backgroundColor={colors.softCoral}
-            textColor={colors.primary}
-          />
-          <TouchableOpacity style={styles.changePhotoBtn}>
-            <Text style={styles.changePhotoText}>Change Avatar</Text>
+          <TouchableOpacity
+            style={styles.photoDropZone}
+            onPress={handlePickImage}
+            onDrop={Platform.OS === 'web' ? handleWebDrop : undefined}
+            onDragOver={Platform.OS === 'web' ? (event) => event.preventDefault?.() : undefined}
+            activeOpacity={0.8}
+            accessibilityLabel="Upload a profile picture"
+          >
+            <ImagePlaceholder
+              source={profileImage ? { uri: profileImage } : undefined}
+              initials={name ? name.substring(0, 2) : 'EM'}
+              size={74}
+              backgroundColor={colors.softCoral}
+              textColor={colors.primary}
+            />
+            <Text style={styles.photoActionText}>{profileImage ? 'Replace photo' : 'Upload profile photo'}</Text>
+            <Text style={styles.photoHint}>{Platform.OS === 'web' ? 'Click to choose or drag and drop an image here' : 'Choose an image from your photo library'}</Text>
           </TouchableOpacity>
+          {!!profileImage && <TouchableOpacity onPress={() => setProfileImage('')}><Text style={styles.removePhotoText}>Remove photo</Text></TouchableOpacity>}
+          {!!photoError && <Text style={styles.photoError}>{photoError}</Text>}
         </Card>
 
         <Card style={styles.formCard}>
@@ -215,13 +293,40 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     marginBottom: spacing.md
   },
-  changePhotoBtn: {
-    marginTop: spacing.xs
+  photoDropZone: {
+    alignItems: 'center',
+    width: '100%',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    borderRadius: 12,
+    padding: spacing.md,
+    backgroundColor: '#FFF8F5',
   },
-  changePhotoText: {
+  photoActionText: {
     color: colors.primary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    marginTop: spacing.sm,
+  },
+  photoHint: {
+    color: colors.textSecondary,
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    lineHeight: 17,
+  },
+  removePhotoText: {
+    color: '#B42318',
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    marginTop: spacing.sm,
+  },
+  photoError: {
+    color: '#B42318',
+    fontSize: typography.fontSize.xs,
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
   formCard: {
     backgroundColor: colors.white,

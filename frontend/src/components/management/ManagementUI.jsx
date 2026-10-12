@@ -113,6 +113,18 @@ export const Banner = ({ type = 'info', message }) => {
   );
 };
 
+/** Floating feedback message, anchored to the bottom of the screen so it is always in view. */
+export const Toast = ({ type = 'info', message }) => {
+  if (!message) return null;
+  return (
+    <View pointerEvents="none" style={styles.toastWrap}>
+      <View style={styles.toastInner}>
+        <Banner type={type} message={message} />
+      </View>
+    </View>
+  );
+};
+
 export const LoadingState = ({ text = 'Loading...' }) => (
   <View style={styles.centerBox}>
     <ActivityIndicator size="large" color={colors.primary} />
@@ -231,6 +243,24 @@ const styles = StyleSheet.create({
   banner: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginBottom: 14 },
   bannerIcon: { marginRight: 8 },
   bannerText: { flex: 1, fontSize: 13, fontWeight: '600' },
+  toastWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 12,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    zIndex: 20,
+  },
+  toastInner: {
+    width: '100%',
+    maxWidth: 560,
+    shadowColor: '#3D2C2E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
+  },
   centerBox: { alignItems: 'center', paddingVertical: 36, paddingHorizontal: 12 },
   centerText: { fontSize: 13, color: colors.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 19 },
   emptyCircle: {

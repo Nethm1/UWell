@@ -15,12 +15,30 @@ export type StudentStackParamList = {
   MoodResult: { mood: string; level: number };
   Resources: undefined;
   CounselorList: undefined;
-  CounselorProfile: { counselorId: number };
-  Availability: { counselorId: number };
+  CounselorProfile: { counselorId: string };
+  Availability: { counselorId: string; counselorName?: string; appointmentId?: string };
   AppointmentDetails: { appointmentId: number };
-  ReviewBooking: { counselorId: number; date: string; time: string };
+  ReviewBooking: {
+    counselorId: string;
+    counselorName?: string;
+    date: string;
+    time: string;
+    sessionType?: string;
+    notes?: string;
+    appointmentId?: string;
+  };
   BookingConfirmed: { appointmentId: number };
   MySessions: undefined;
+  WelfareDirectory: undefined;
+  WelfareProfile: { officerId: string };
+  WelfareChat: {
+    officerId?: string;
+    conversationId?: string;
+    officerName?: string;
+    officerRole?: string;
+    officeLocation?: string;
+    emergencyPhone?: string;
+  };
 };
 
 export type WelfareTabParamList = {

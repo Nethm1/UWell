@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../../middleware/auth');
+const { protect, authorise } = require('../../middleware/auth');
 const { ensureCounselorSeed } = require('../../scripts/seedCounselorData');
 
 const profileController = require('../../controllers/counselor/profileController');
@@ -11,7 +11,7 @@ const availabilityController = require('../../controllers/counselor/availability
 const videoSessionController = require('../../controllers/counselor/videoSessionController');
 
 // All counselor-module routes require a valid JWT.
-router.use(protect);
+router.use(protect, authorise('counselor'));
 
 // Seed the counselor demo data once per process when the collections are empty.
 router.use(ensureCounselorSeed);
@@ -30,6 +30,7 @@ router.put('/appointments/:id', appointmentController.updateAppointmentStatus);
 router.get('/students', studentController.getStudents);
 router.get('/students/:id', studentController.getStudentById);
 router.post('/students/:id/notes', studentController.saveSessionNotes);
+router.patch('/students/:id/status', studentController.updateStudentStatus);
 
 // Messages
 router.get('/messages', messageController.getMessages);
@@ -39,6 +40,7 @@ router.post('/messages', messageController.sendMessage);
 // Availability
 router.get('/availability', availabilityController.getAvailability);
 router.post('/availability', availabilityController.createAvailability);
+router.put('/availability', availabilityController.saveWeeklyAvailability);
 router.put('/availability/:id', availabilityController.updateAvailability);
 router.delete('/availability/:id', availabilityController.deleteAvailability);
 

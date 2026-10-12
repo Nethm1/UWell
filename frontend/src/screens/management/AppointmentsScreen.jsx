@@ -23,6 +23,7 @@ import {
   StatusPill,
   Chip,
   Banner,
+  Toast,
   LoadingState,
   EmptyState,
   ErrorState,
@@ -124,8 +125,6 @@ const AppointmentsScreen = () => {
       <NavigationHeader title="Appointments" />
 
       <ResponsiveScroll refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }}>
-        {banner ? <Banner type={banner.type} message={banner.message} /> : null}
-
         <View style={styles.searchBox}>
           <Feather name="search" size={16} color={colors.textMuted} />
           <TextInput
@@ -236,6 +235,8 @@ const AppointmentsScreen = () => {
                         </TouchableOpacity>
                       </View>
 
+                      {banner ? <Banner type={banner.type} message={banner.message} /> : null}
+
                       <View style={styles.detailBox}>
                         <InfoRow label="Counselor" value={selected.counselorName} />
                         <InfoRow label="Service" value={selected.specialization} />
@@ -305,6 +306,8 @@ const AppointmentsScreen = () => {
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
+
+      {banner && !selected ? <Toast type={banner.type} message={banner.message} /> : null}
 
       <ConfirmModal
         visible={confirmCancel}

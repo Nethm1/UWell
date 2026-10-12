@@ -23,6 +23,12 @@ const {
   deleteServiceNote,
   getSecurityInfo,
   changePassword,
+  getManagementDashboard,
+  getAllUsers,
+  updateUser,
+  deleteUser,
+  getSystemSettings,
+  updateSystemSettings,
 } = require('../../controllers/management/managementController');
 
 // Auth (public)
@@ -39,6 +45,9 @@ router.get('/all-requests', getAllRequests);
 router.post('/approve-request', approveRequest);
 router.post('/reject-request', rejectRequest);
 router.get('/dashboard-stats', getDashboardStats);
+
+// Dashboard overview (summary stats and recent activity)
+router.get('/dashboard', getManagementDashboard);
 
 // Appointment summary
 router.get('/appointments', getManagementAppointments);
@@ -57,6 +66,15 @@ router.delete('/usage-details/notes/:id', deleteServiceNote);
 // Privacy & security
 router.get('/security', getSecurityInfo);
 router.put('/password', changePassword);
+
+// User administration
+router.get('/users', getAllUsers);
+router.put('/users/:id', updateUser);
+router.delete('/users/:id', deleteUser);
+
+// System settings
+router.get('/settings', getSystemSettings);
+router.put('/settings', updateSystemSettings);
 
 // Profile
 router.get('/profile', getManagementProfile);

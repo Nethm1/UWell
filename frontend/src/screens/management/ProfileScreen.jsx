@@ -10,7 +10,7 @@ import useSessionGuard from '../../components/management/useSessionGuard';
 import {
   ResponsiveScroll,
   SectionCard,
-  Banner,
+  Toast,
   LoadingState,
   ActionButton,
   useLayout,
@@ -161,8 +161,6 @@ const ProfileScreen = () => {
               <Text style={styles.profileEmail}>{profile.email}</Text>
             </View>
 
-            {feedback ? <Banner type={feedback.type} message={feedback.message} /> : null}
-
             <View style={isWide ? styles.twoColumn : null}>
               <View style={isWide ? styles.column : null}>
                 <SectionCard title="Personal details" icon="user" iconTone="info">
@@ -192,6 +190,8 @@ const ProfileScreen = () => {
           </>
         )}
       </ResponsiveScroll>
+
+      {feedback ? <Toast type={feedback.type} message={feedback.message} /> : null}
 
       <ConfirmModal
         visible={confirmLogout}

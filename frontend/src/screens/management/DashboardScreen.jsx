@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../../theme';
 import NavigationHeader from '../../components/navigation/Header';
 import { authService } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
+import { resolveProfileImageUrl } from '../../services/welfareService';
 import ConfirmModal from '../../components/management/ConfirmModal';
 import useSessionGuard from '../../components/management/useSessionGuard';
 import {
@@ -12,7 +13,7 @@ import {
   SectionCard,
   StatusPill,
   Chip,
-  Banner,
+  Toast,
   LoadingState,
   EmptyState,
   ErrorState,
@@ -132,10 +133,20 @@ const DashboardScreen = () => {
     const isCounselor = item.role === 'counselor';
     const busy = busyId === item.id;
     const status = item.approvalStatus;
+    const avatarUrl = resolveProfileImageUrl(item.profilePicture);
 
     return (
       <SectionCard key={item.id} style={styles.requestCard}>
         <View style={styles.cardTop}>
+          <View style={styles.avatarBox}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImg} accessibilityLabel={`${item.fullName} profile picture`} />
+            ) : (
+              <Text style={styles.avatarInitials}>
+                {((item.firstName || '')[0] || 'U') + ((item.lastName || '')[0] || '')}
+              </Text>
+            )}
+          </View>
           <View style={styles.cardTopText}>
             <Text style={styles.applicantName}>{item.fullName}</Text>
             <View style={styles.tagRow}>
@@ -234,8 +245,6 @@ const DashboardScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {banner ? <Banner type={banner.type} message={banner.message} /> : null}
-
         <View style={[styles.statusCard, counts.pending > 0 ? styles.statusPending : styles.statusClear]}>
           <View style={[styles.statusIcon, { backgroundColor: counts.pending > 0 ? '#FDE68A' : colors.statusGreenBg }]}>
             <Feather
@@ -303,6 +312,8 @@ const DashboardScreen = () => {
           </View>
         )}
       </ResponsiveScroll>
+
+      {banner ? <Toast type={banner.type} message={banner.message} /> : null}
 
       <ConfirmModal
         visible={dialog?.kind === 'approve'}
@@ -390,6 +401,18 @@ const styles = StyleSheet.create({
   requestCard: { marginBottom: 12 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
   cardTopText: { flex: 1, paddingRight: 8 },
+  avatarBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  avatarImg: { width: 44, height: 44, borderRadius: 22 },
+  avatarInitials: { fontSize: 14, fontWeight: '700', color: colors.primary },
   applicantName: { fontSize: 16, fontWeight: '700', color: colors.darkText, marginBottom: 6 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
   roleTag: {

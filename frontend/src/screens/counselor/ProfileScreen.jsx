@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   StatusBar,
   Alert,
   Animated,
-  Dimensions
+  Dimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -65,10 +67,24 @@ const ProfileScreen = ({ navigation }) => {
     setSchedule(av);
   };
 
+  const confirmSignOut = async () => {
+    await logout();
+  };
+
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    const message = 'Are you sure you want to sign out?';
+
+    // Alert.alert is not supported on web, so use the browser confirmation there.
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(message)) {
+        void confirmSignOut();
+      }
+      return;
+    }
+
+    Alert.alert('Sign Out', message, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => logout?.() },
+      { text: 'Sign Out', style: 'destructive', onPress: () => { void confirmSignOut(); } },
     ]);
   };
 
@@ -125,11 +141,19 @@ const ProfileScreen = ({ navigation }) => {
           <View style={styles.heroLeft}>
             {/* Avatar */}
             <View style={styles.avatarWrap}>
-              <View style={styles.avatarCircle}>
-                <Text style={styles.avatarText}>
-                  {(profile?.avatarInitials || 'EM').toUpperCase()}
-                </Text>
-              </View>
+              {profile?.profileImage ? (
+                <Image
+                  source={{ uri: profile.profileImage }}
+                  style={styles.avatarImage}
+                  accessibilityLabel="Counselor profile photo"
+                />
+              ) : (
+                <View style={styles.avatarCircle}>
+                  <Text style={styles.avatarText}>
+                    {(profile?.avatarInitials || 'EM').toUpperCase()}
+                  </Text>
+                </View>
+              )}
               <TouchableOpacity
                 style={styles.editAvatarBtn}
                 onPress={() => navigation.navigate('EditProfile')}
@@ -380,6 +404,17 @@ const ProfileScreen = ({ navigation }) => {
           <Feather name="chevron-right" size={16} color={colors.white} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={handleSignOut}
+          accessibilityRole="button"
+          accessibilityLabel="Log out"
+          activeOpacity={0.8}
+        >
+          <Feather name="log-out" size={17} color="#B42318" style={{ marginRight: 9 }} />
+          <Text style={styles.logoutBtnText}>Log Out</Text>
+        </TouchableOpacity>
+
         <View style={{ height: 32 }} />
       </Animated.ScrollView>
     </SafeAreaView>
@@ -437,6 +472,22 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  logoutBtn: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FDE8E8',
+    borderColor: '#F9A8A8',
+    borderWidth: 1,
+    borderRadius: 14,
+    marginTop: spacing.md,
+  },
+  logoutBtnText: {
+    color: '#B42318',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
   // ── Hero Card ────────────────────────────────────────────────
   heroCard: {
@@ -483,6 +534,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,131,107,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: 'rgba(232,131,107,0.5)',
+    backgroundColor: colors.softCoral,
   },
   avatarText: {
     fontSize: 26,

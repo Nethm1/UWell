@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import JoinVideoCallButton from '../../components/common/JoinVideoCallButton';
 
 export default function BookingConfirmationScreen() {
   const navigation = useNavigation<any>();
@@ -15,8 +16,15 @@ export default function BookingConfirmationScreen() {
   const params = route.params as {
     counselorId?: string; date?: string; time?: string;
     sessionType?: string; notes?: string; appointmentId?: string;
+    counselorName?: string; counselorSpecialization?: string;
+    counselorPhone?: string;
   } || {};
-  const { counselorId, date, time, sessionType, notes, appointmentId } = params;
+  const {
+    date, time, sessionType, notes, appointmentId,
+    counselorName, counselorSpecialization, counselorPhone = '',
+  } = params;
+
+  const isOnline = sessionType === 'Online';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -59,9 +67,9 @@ export default function BookingConfirmationScreen() {
 
             <View style={styles.detailContent}>
               <Text style={styles.label}>Counselor</Text>
-              <Text style={styles.value}>Dr. Sarah Perera</Text>
+              <Text style={styles.value}>{counselorName || 'Counselor'}</Text>
               <Text style={styles.secondaryValue}>
-                Student Counselling
+                {counselorSpecialization || 'Student Counselling'}
               </Text>
             </View>
           </View>
@@ -103,7 +111,7 @@ export default function BookingConfirmationScreen() {
           {/* Session Type */}
           <View style={styles.detailRow}>
             <View style={styles.iconBox}>
-              <Text style={styles.icon}>💻</Text>
+              <Text style={styles.icon}>{isOnline ? '🎥' : '🏢'}</Text>
             </View>
 
             <View style={styles.detailContent}>
@@ -111,9 +119,24 @@ export default function BookingConfirmationScreen() {
               <Text style={styles.value}>
                 {String(sessionType || 'Online')}
               </Text>
+              {isOnline && (
+                <Text style={styles.onlineHint}>
+                  Join after your counselor confirms the appointment.
+                </Text>
+              )}
             </View>
           </View>
         </View>
+
+        {/* ── Join Video Now (Online only) ── */}
+        {isOnline && (
+          <JoinVideoCallButton
+            appointmentId={appointmentId}
+            status="upcoming"
+            sessionType={sessionType}
+            style={styles.videoJoinBtn}
+          />
+        )}
 
         {/* Reminder */}
         <View style={styles.reminderCard}>
@@ -154,7 +177,7 @@ export default function BookingConfirmationScreen() {
             styles.primaryButton,
             pressed && styles.buttonPressed,
           ]}
-          onPress={() => navigation.navigate('AppointmentDetails', { appointmentId: route.params?.appointmentId || '' })}
+          onPress={() => navigation.navigate('AppointmentDetails', { appointmentId: (route.params as any)?.appointmentId || '' })}
         >
           <Text style={styles.primaryButtonText}>
             View Appointment
@@ -389,6 +412,40 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: '#806F69',
+  },
+
+  onlineHint: {
+    fontSize: 10,
+    color: '#3973B9',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+
+  // ── Video join banner ──────────────────────────────────────────────────────
+  videoJoinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A2E',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 15,
+    gap: 12,
+  },
+  videoJoinIcon: { fontSize: 28 },
+  videoJoinTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  videoJoinSub: {
+    color: '#A0C8FF',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  videoJoinArrow: {
+    color: '#A0C8FF',
+    fontSize: 26,
+    marginLeft: 'auto' as any,
   },
 
   primaryButton: {

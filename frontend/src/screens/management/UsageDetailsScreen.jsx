@@ -9,7 +9,7 @@ import {
   ResponsiveScroll,
   SectionCard,
   Chip,
-  Banner,
+  Toast,
   LoadingState,
   EmptyState,
   ErrorState,
@@ -104,8 +104,6 @@ const UsageDetailsScreen = ({ navigation }) => {
       <NavigationHeader title="Usage Details" onBack={() => navigation.goBack()} />
 
       <ResponsiveScroll refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }}>
-        {banner ? <Banner type={banner.type} message={banner.message} /> : null}
-
         {loading ? (
           <LoadingState text="Loading usage details..." />
         ) : error || !data ? (
@@ -146,7 +144,7 @@ const UsageDetailsScreen = ({ navigation }) => {
                       <View style={[styles.fill, { width: `${Math.max(3, dept.percentage)}%` }]} />
                     </View>
                     <Text style={styles.deptMeta}>
-                      {dept.sessions} sessions - {dept.completed} completed - {dept.cancelled} cancelled
+                      {dept.sessions} {dept.sessions === 1 ? 'session' : 'sessions'} - {dept.completed} completed - {dept.cancelled} cancelled
                     </Text>
                   </View>
                 ))
@@ -214,6 +212,8 @@ const UsageDetailsScreen = ({ navigation }) => {
           </>
         )}
       </ResponsiveScroll>
+
+      {banner ? <Toast type={banner.type} message={banner.message} /> : null}
 
       <ConfirmModal
         visible={!!toDelete}

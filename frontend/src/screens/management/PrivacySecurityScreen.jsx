@@ -11,7 +11,7 @@ import useSessionGuard from '../../components/management/useSessionGuard';
 import {
   ResponsiveScroll,
   SectionCard,
-  Banner,
+  Toast,
   LoadingState,
   ErrorState,
   InfoRow,
@@ -101,7 +101,7 @@ const PrivacySecurityScreen = () => {
   const hasNumber = /\d/.test(newPassword);
   const hasSpecial = /[^A-Za-z0-9]/.test(newPassword);
   const strong = longEnough && hasUpper && hasLower && hasNumber && hasSpecial;
-  const differs = !!newPassword && newPassword !== currentPassword;
+  const differs = !!newPassword && !!currentPassword && newPassword !== currentPassword;
   const matches = !!confirmPassword && newPassword === confirmPassword;
   const canSubmit = !!currentPassword && strong && differs && matches;
 
@@ -136,8 +136,6 @@ const PrivacySecurityScreen = () => {
       <NavigationHeader title="Privacy & Security" />
 
       <ResponsiveScroll refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }}>
-        {banner ? <Banner type={banner.type} message={banner.message} /> : null}
-
         {loading ? (
           <LoadingState text="Loading account details..." />
         ) : error || !info ? (
@@ -209,6 +207,8 @@ const PrivacySecurityScreen = () => {
           style={styles.logoutBtn}
         />
       </ResponsiveScroll>
+
+      {banner ? <Toast type={banner.type} message={banner.message} /> : null}
 
       <ConfirmModal
         visible={confirmLogout}

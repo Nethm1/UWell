@@ -15,7 +15,7 @@ console.log('[UWell API] Base URL configured:', API_BASE_URL);
 api.interceptors.request.use(
   async (config) => {
     const token = await AsyncStorage.getItem('token');
-    console.log(`[UWell API Req] ${config.method?.toUpperCase()} ${config.url} | token: ${token ? token.substring(0, 15) + '...' : 'NONE'}`);
+    console.log(`[UWell API Req] ${config.method?.toUpperCase()} ${config.url} | authenticated: ${Boolean(token)}`);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -32,7 +32,20 @@ api.interceptors.response.use(
     console.log(`[UWell API Res] ${response.status} from ${response.config.url}`);
     return response;
   },
-  (error) => {
+  async (error) => {
+    const config = error.config;
+    const canRetry = config
+      && ['get', 'head', 'options'].includes(String(config.method || '').toLowerCase())
+      && !error.response
+      && !config.__uwellNetworkRetry;
+
+    // Retry a safe read once when startup or a brief Wi-Fi interruption times out.
+    if (canRetry) {
+      config.__uwellNetworkRetry = true;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return api.request(config);
+    }
+
     // Only console.log to avoid React Native LogBox banners on user screen
     console.log(`[UWell API] ${error.config?.url} returned ${error.response?.status || 'Network Error'}:`, error.response?.data?.message || error.message);
     if (error.response?.status === 401) {

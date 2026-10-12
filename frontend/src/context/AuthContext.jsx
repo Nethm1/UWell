@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { USER_ROLES } from '../utils/constants';
+import { notificationService } from '../services/notificationService';
 
 const AuthContext = createContext(null);
 
@@ -13,6 +14,15 @@ export const AuthProvider = ({ children }) => {
     loadUserFromStorage();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      const uid = user._id || user.id;
+      if (uid) {
+        notificationService.registerSocketUser(uid, user.role || 'student');
+      }
+    }
+  }, [user]);
+
   const loadUserFromStorage = async () => {
     try {
       const storedUser = await AsyncStorage.getItem('user');
@@ -21,6 +31,7 @@ export const AuthProvider = ({ children }) => {
         setUser(parsedUser);
         setIsAuthenticated(true);
       }
+
     } catch (error) {
       console.error('Error loading user from storage:', error);
     } finally {
@@ -47,12 +58,12 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      setUser(null);
-      setIsAuthenticated(false);
-      await AsyncStorage.removeItem('user');
-      await AsyncStorage.removeItem('token');
+      await AsyncStorage.multiRemove(['user', 'token']);
     } catch (error) {
       console.error('Error during logout:', error);
+    } finally {
+      setUser(null);
+      setIsAuthenticated(false);
     }
   };
 
