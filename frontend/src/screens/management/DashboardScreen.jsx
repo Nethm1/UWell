@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -15,10 +16,12 @@ import { colors, spacing, typography } from '../../theme';
 import NavigationHeader from '../../components/navigation/Header';
 import { authService } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
+import useSessionGuard from '../../components/management/useSessionGuard';
 import { resolveProfileImageUrl } from '../../services/welfareService';
 
 export default function DashboardScreen({ navigation }) {
   const { logout } = useAuth();
+  const describeError = useSessionGuard();
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeStudents: 0,
@@ -63,7 +66,7 @@ export default function DashboardScreen({ navigation }) {
         }));
       }
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      console.error('Error loading dashboard data:', describeError(error, 'Could not load dashboard data.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -103,7 +106,7 @@ export default function DashboardScreen({ navigation }) {
       });
       setTimeout(() => setFeedback(null), 5000);
     } catch (error) {
-      Alert.alert('Approval Failed', error.response?.data?.message || error.message);
+      Alert.alert('Approval Failed', describeError(error));
     } finally {
       setActionLoading((p) => ({ ...p, [item.id]: null }));
     }
@@ -137,7 +140,7 @@ export default function DashboardScreen({ navigation }) {
               });
               setTimeout(() => setFeedback(null), 5000);
             } catch (error) {
-              Alert.alert('Rejection Failed', error.response?.data?.message || error.message);
+              Alert.alert('Rejection Failed', describeError(error));
             } finally {
               setActionLoading((p) => ({ ...p, [item.id]: null }));
             }

@@ -225,6 +225,8 @@ const DashboardScreen = ({ navigation }) => {
   const [students, setStudents] = useState([]);
   const [callAvailable, setCallAvailable] = useState(true);
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
