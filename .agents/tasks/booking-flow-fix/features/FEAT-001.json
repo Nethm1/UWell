@@ -1,0 +1,23 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix backend startup crash and add missing notification routes",
+  "status": "pending",
+  "steps": [
+    "Read backend/src/controllers/counselor/appointmentController.js and verify it does NOT import notificationController (remove any incorrect import if present)",
+    "Add notification routes to backend/src/routes/counselor/counselorRoutes.js: router.get('/notifications', notificationController.getCounselorNotifications), router.get('/notifications/unread-count', notificationController.getUnreadCount), router.put('/notifications/:id/read', notificationController.markAsRead)",
+    "Create backend/src/services/notificationService.js with helper function sendStudentNotification(studentId, title, message, type, appointmentId)",
+    "Test backend startup with 'npm run dev' and verify no crash occurs"
+  ],
+  "acceptance_criteria": [
+    "Backend starts without 'getCounselorNotifications is not defined' error",
+    "GET /api/counselor/notifications endpoint returns counselor's notifications",
+    "POST /api/student/notifications endpoint (if needed) creates notification records"
+  ],
+  "verification": [
+    "Run 'npm run dev' and confirm backend starts on port 8082",
+    "Use Postman/curl to test GET /api/counselor/notifications with valid JWT token"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

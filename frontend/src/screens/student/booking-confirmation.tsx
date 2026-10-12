@@ -32,26 +32,31 @@ export default function BookingConfirmationScreen() {
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
+        {/* Status Badge */}
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusBadgeText}>PENDING</Text>
+        </View>
+
         {/* Success Icon */}
         <View style={styles.successCircle}>
           <Text style={styles.checkmark}>✓</Text>
         </View>
 
         {/* Success Message */}
-        <Text style={styles.title}>Booking Confirmed!</Text>
+        <Text style={styles.title}>Booking Created!</Text>
 
         <Text style={styles.subtitle}>
-          Your counseling appointment has been successfully booked.
+          Your counseling appointment request has been submitted. Your counselor will review and confirm shortly.
         </Text>
 
         {/* Confirmation Number */}
         <View style={styles.confirmationCard}>
           <Text style={styles.confirmationLabel}>
-            Appointment Confirmed
+            Pending Counselor Approval
           </Text>
 
           <Text style={styles.confirmationText}>
-            Your appointment is scheduled with your selected counselor.
+            Your appointment request has been sent to your selected counselor.
           </Text>
         </View>
 
@@ -220,6 +225,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 25,
     paddingBottom: 35,
+  },
+
+  statusBadge: {
+    backgroundColor: '#F47F69',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
 
   successCircle: {
