@@ -47,6 +47,24 @@ export function TabBarItem({
 /* ─────────────────────────────────────────────────────────
    tabScreenOptions factory
 ───────────────────────────────────────────────────────── */
+export const getTabBarStyle = (safeBottomInset = 0) => {
+  const bottomPadding = Math.max(safeBottomInset, 8);
+
+  return {
+    backgroundColor: WHITE,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    height: 64 + bottomPadding,
+    paddingBottom: bottomPadding,
+    paddingTop: 6,
+    shadowColor: '#C6AEA1',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 10,
+  };
+};
+
 export const tabScreenOptions = (_icon: string, routeName?: string) => ({
   tabBarIcon: ({ focused }: { focused: boolean }) => (
     <TabBarItem name={routeName || ''} focused={focused} />
@@ -54,19 +72,7 @@ export const tabScreenOptions = (_icon: string, routeName?: string) => ({
   tabBarActiveTintColor:   CORAL,
   tabBarInactiveTintColor: MUTED,
   headerShown: false,
-  tabBarStyle: {
-    backgroundColor: WHITE,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-    height: 72,
-    paddingBottom: 10,
-    paddingTop: 4,
-    shadowColor: '#C6AEA1',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 10,
-  },
+  tabBarStyle: getTabBarStyle(),
   tabBarLabelStyle: {
     fontSize: 10,
     fontWeight: '600' as TextStyle['fontWeight'],

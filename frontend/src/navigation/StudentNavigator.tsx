@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/student/home';
 import MoodCheckInScreen from '../screens/student/mood-checkin';
 import MoodResultScreen from '../screens/student/checkin-result';
@@ -30,7 +31,7 @@ import CallRequestScreen from '../screens/student/CallRequestScreen';
 import WelfareDirectoryScreen from '../screens/student/welfare-directory';
 import WelfareProfileScreen from '../screens/student/welfare-profile';
 import WelfareChatScreen from '../screens/student/welfare-chat';
-import { tabScreenOptions } from './TabHelpers';
+import { getTabBarStyle, tabScreenOptions } from './TabHelpers';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -116,10 +117,13 @@ const ProfileStackScreen = () => (
 );
 
 const StudentNavigator = () => {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         ...tabScreenOptions('', route.name),
+        tabBarStyle: getTabBarStyle(insets.bottom),
       })}
     >
       <Tab.Screen name="Home"       component={HomeStackScreen}      options={{ tabBarLabel: 'Home' }} />
